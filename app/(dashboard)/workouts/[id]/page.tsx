@@ -20,12 +20,20 @@ import {
   X,
 } from 'lucide-react';
 import { useWorkouts } from '@/lib/hooks/useWorkouts';
-import { useWorkoutStore } from '@/store/workoutStore';
+import { useWorkoutStore, ActiveSet } from '@/store/workoutStore';
 import { ExerciseSelector } from '@/components/workouts/ExerciseSelector';
 import { PRNotificationBanner } from '@/components/workouts/PRNotificationBanner';
 import { formatDuration, getMuscleGroupColor } from '@/lib/utils';
 import { WorkoutExercise, WorkoutSet } from '@/types';
 import { toast } from '@/lib/hooks/useToast';
+
+const emptySetInput: ActiveSet = {
+  weight: '',
+  reps_done: '',
+  rir_done: '',
+  reps_target: '',
+  rir_target: '',
+};
 
 export default function WorkoutSessionPage() {
   const t = useTranslations('workouts');
@@ -263,7 +271,7 @@ export default function WorkoutSessionPage() {
                 onAddSet={() => handleAddSet(workoutExercise)}
                 onDeleteSet={(setId) => handleDeleteSet(workoutExercise.id, setId)}
                 onDeleteExercise={() => handleDeleteExercise(workoutExercise.id)}
-                setInput={activeSetInputs[workoutExercise.id] || {}}
+                setInput={activeSetInputs[workoutExercise.id] || emptySetInput}
                 onInputChange={(field, value) => updateSetInput(workoutExercise.id, field, value)}
                 tWorkouts={t}
               />
@@ -321,8 +329,8 @@ interface ExerciseCardProps {
   onAddSet: () => void;
   onDeleteSet: (setId: string) => void;
   onDeleteExercise: () => void;
-  setInput: Record<string, string>;
-  onInputChange: (field: string, value: string) => void;
+  setInput: ActiveSet;
+  onInputChange: (field: keyof ActiveSet, value: string) => void;
   tWorkouts: (key: string) => string;
 }
 

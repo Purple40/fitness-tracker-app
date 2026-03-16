@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { WorkoutSession, WorkoutExercise, WorkoutSet, Exercise, PRNotification } from '@/types';
 
-interface ActiveSet {
+export interface ActiveSet {
   weight: string;
   reps_done: string;
   rir_done: string;
