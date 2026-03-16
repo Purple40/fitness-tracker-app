@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { localRecovery } from '@/lib/localDb';
 import { RecoveryMetric } from '@/types';
 import { getTodayString } from '@/lib/utils';
 
@@ -9,24 +10,30 @@ export function useRecovery() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabase = isSupabaseConfigured ? createClient() : null;
 
   const fetchMetrics = useCallback(async (limit = 30) => {
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
-        .from('recovery_metrics')
-        .select('*')
-        .order('date', { ascending: false })
-        .limit(limit);
+      let data: RecoveryMetric[];
 
-      if (err) throw err;
-      setMetrics(data || []);
+      if (!supabase) {
+        const { data: localData } = localRecovery.getLogs();
+        data = ((localData || []) as unknown as RecoveryMetric[]).slice(0, limit);
+      } else {
+        const { data: remoteData, error: err } = await supabase
+          .from('recovery_metrics')
+          .select('*')
+          .order('date', { ascending: false })
+          .limit(limit);
+        if (err) throw err;
+        data = remoteData || [];
+      }
 
+      setMetrics(data);
       const today = getTodayString();
-      const todayData = data?.find((m) => m.date === today) || null;
-      setTodayMetric(todayData);
+      setTodayMetric(data.find((m) => m.date === today) || null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch recovery metrics');
     } finally {
@@ -44,13 +51,21 @@ export function useRecovery() {
   }) => {
     setError(null);
     try {
-      const { data: result, error: err } = await supabase
-        .from('recovery_metrics')
-        .upsert(data, { onConflict: 'user_id,date' })
-        .select()
-        .single();
+      let result: RecoveryMetric;
 
-      if (err) throw err;
+      if (!supabase) {
+        const { data: r, error: e } = localRecovery.upsert(data as Record<string, unknown>);
+        if (e) throw new Error(e);
+        result = r as unknown as RecoveryMetric;
+      } else {
+        const { data: r, error: err } = await supabase
+          .from('recovery_metrics')
+          .upsert(data, { onConflict: 'user_id,date' })
+          .select()
+          .single();
+        if (err) throw err;
+        result = r;
+      }
 
       setMetrics((prev) => {
         const exists = prev.findIndex((m) => m.date === data.date);

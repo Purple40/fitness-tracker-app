@@ -18,13 +18,15 @@ import {
   ChevronUp,
   Trophy,
   X,
+  Edit2,
+  Eye,
 } from 'lucide-react';
 import { useWorkouts } from '@/lib/hooks/useWorkouts';
 import { useWorkoutStore, ActiveSet } from '@/store/workoutStore';
 import { ExerciseSelector } from '@/components/workouts/ExerciseSelector';
 import { PRNotificationBanner } from '@/components/workouts/PRNotificationBanner';
 import { formatDuration, getMuscleGroupColor } from '@/lib/utils';
-import { WorkoutExercise, WorkoutSet } from '@/types';
+import { WorkoutExercise, WorkoutSet, WorkoutSession } from '@/types';
 import { toast } from '@/lib/hooks/useToast';
 
 const emptySetInput: ActiveSet = {
@@ -43,6 +45,14 @@ export default function WorkoutSessionPage() {
   const router = useRouter();
   const sessionId = params.id as string;
 
+  // ── Local state for completed sessions ──────────────────────────────────
+  const [sessionData, setSessionData] = useState<WorkoutSession | null>(null);
+  const [localExercises, setLocalExercises] = useState<WorkoutExercise[]>([]);
+  const [localSetInputs, setLocalSetInputs] = useState<Record<string, ActiveSet>>({});
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+
+  // ── Shared UI state ──────────────────────────────────────────────────────
   const [showExerciseSelector, setShowExerciseSelector] = useState(false);
   const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -75,36 +85,66 @@ export default function WorkoutSessionPage() {
     endSession,
   } = useWorkoutStore();
 
-  // Load session on mount
+  // A session is "completed" when it has a duration saved
+  const isCompleted =
+    sessionData !== null &&
+    sessionData.duration !== null &&
+    sessionData.duration !== undefined;
+
+  // ── Load session on mount ────────────────────────────────────────────────
   useEffect(() => {
     const loadSession = async () => {
+      setPageLoading(true);
       const { data } = await fetchSessionById(sessionId);
-      if (data && !isWorkoutActive) {
-        startSession(data);
-        if (data.exercises) {
-          setExpandedExercises(new Set(data.exercises.map((e: WorkoutExercise) => e.id)));
+
+      if (data) {
+        setSessionData(data as WorkoutSession);
+        const completed =
+          (data as WorkoutSession).duration !== null &&
+          (data as WorkoutSession).duration !== undefined;
+
+        if (completed) {
+          // ── Completed session: use local state, never touch the store ──
+          const exList = ((data as WorkoutSession).exercises || []) as WorkoutExercise[];
+          setLocalExercises(exList);
+          setExpandedExercises(new Set(exList.map((e) => e.id)));
+          const inputs: Record<string, ActiveSet> = {};
+          exList.forEach((e) => {
+            inputs[e.id] = { ...emptySetInput };
+          });
+          setLocalSetInputs(inputs);
+        } else {
+          // ── Active session: use workout store ──
+          if (!isWorkoutActive || activeSession?.id !== sessionId) {
+            startSession(data as WorkoutSession);
+          }
+          const exList =
+            isWorkoutActive && activeSession?.id === sessionId
+              ? activeExercises
+              : (((data as WorkoutSession).exercises || []) as WorkoutExercise[]);
+          setExpandedExercises(new Set(exList.map((e) => e.id)));
         }
-      } else if (data && isWorkoutActive && activeSession?.id === sessionId) {
-        setExpandedExercises(new Set(activeExercises.map((e) => e.id)));
       }
+      setPageLoading(false);
     };
     loadSession();
   }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Timer
+  // ── Timer — only for active sessions ────────────────────────────────────
   useEffect(() => {
-    if (!isWorkoutActive || !workoutStartTime) return;
+    if (isCompleted || !isWorkoutActive || !workoutStartTime) return;
     const interval = setInterval(() => {
       setElapsedTime(Math.floor((Date.now() - workoutStartTime.getTime()) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, [isWorkoutActive, workoutStartTime]);
+  }, [isCompleted, isWorkoutActive, workoutStartTime]);
 
   const formatElapsed = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
-    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    if (h > 0)
+      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
@@ -117,19 +157,36 @@ export default function WorkoutSessionPage() {
     });
   };
 
+  // Which data to display
+  const displayExercises = isCompleted ? localExercises : activeExercises;
+  const displaySetInputs = isCompleted ? localSetInputs : activeSetInputs;
+  const canEdit = !isCompleted || isEditMode;
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+
   const handleAddExercise = async (exerciseId: string) => {
-    const { data, error } = await addExerciseToSession(sessionId, exerciseId, activeExercises.length);
+    const { data, error } = await addExerciseToSession(
+      sessionId,
+      exerciseId,
+      displayExercises.length
+    );
     if (error) {
       toast({ title: tCommon('error'), description: error, variant: 'destructive' });
     } else if (data) {
-      addExercise(data);
+      if (isCompleted) {
+        const newEx = { ...data, sets: [] } as WorkoutExercise;
+        setLocalExercises((prev) => [...prev, newEx]);
+        setLocalSetInputs((prev) => ({ ...prev, [data.id]: { ...emptySetInput } }));
+      } else {
+        addExercise(data);
+      }
       setExpandedExercises((prev) => new Set([...prev, data.id]));
       setShowExerciseSelector(false);
     }
   };
 
   const handleAddSet = async (workoutExercise: WorkoutExercise) => {
-    const input = activeSetInputs[workoutExercise.id];
+    const input = displaySetInputs[workoutExercise.id];
     if (!input?.weight && !input?.reps_done) {
       toast({ title: t('enterWeightReps'), variant: 'destructive' });
       return;
@@ -148,13 +205,21 @@ export default function WorkoutSessionPage() {
     if (error) {
       toast({ title: tCommon('error'), description: error, variant: 'destructive' });
     } else if (data) {
-      addSet(workoutExercise.id, data);
-      resetSetInput(workoutExercise.id);
-      if (data.is_pr) {
-        toast({
-          title: t('newPR'),
-          description: `${t('prDesc')} ${workoutExercise.exercise?.name}!`,
-        });
+      if (isCompleted) {
+        setLocalExercises((prev) =>
+          prev.map((ex) =>
+            ex.id === workoutExercise.id
+              ? { ...ex, sets: [...(ex.sets || []), data] }
+              : ex
+          )
+        );
+        setLocalSetInputs((prev) => ({
+          ...prev,
+          [workoutExercise.id]: { ...emptySetInput },
+        }));
+      } else {
+        addSet(workoutExercise.id, data);
+        resetSetInput(workoutExercise.id);
       }
     }
   };
@@ -164,7 +229,17 @@ export default function WorkoutSessionPage() {
     if (error) {
       toast({ title: tCommon('error'), description: error, variant: 'destructive' });
     } else {
-      removeSet(workoutExerciseId, setId);
+      if (isCompleted) {
+        setLocalExercises((prev) =>
+          prev.map((ex) =>
+            ex.id === workoutExerciseId
+              ? { ...ex, sets: (ex.sets || []).filter((s) => s.id !== setId) }
+              : ex
+          )
+        );
+      } else {
+        removeSet(workoutExerciseId, setId);
+      }
     }
   };
 
@@ -174,7 +249,11 @@ export default function WorkoutSessionPage() {
     if (error) {
       toast({ title: tCommon('error'), description: error, variant: 'destructive' });
     } else {
-      removeExercise(workoutExerciseId);
+      if (isCompleted) {
+        setLocalExercises((prev) => prev.filter((e) => e.id !== workoutExerciseId));
+      } else {
+        removeExercise(workoutExerciseId);
+      }
     }
   };
 
@@ -196,40 +275,96 @@ export default function WorkoutSessionPage() {
     }
   };
 
-  const totalSets = activeExercises.reduce((acc, ex) => acc + (ex.sets?.length || 0), 0);
+  const updateLocalSetInput = (
+    exerciseId: string,
+    field: keyof ActiveSet,
+    value: string
+  ) => {
+    setLocalSetInputs((prev) => ({
+      ...prev,
+      [exerciseId]: { ...(prev[exerciseId] || emptySetInput), [field]: value },
+    }));
+  };
 
+  const totalSets = displayExercises.reduce(
+    (acc, ex) => acc + (ex.sets?.length || 0),
+    0
+  );
+
+  // ── Loading state ────────────────────────────────────────────────────────
+  if (pageLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">{tCommon('loading')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="page-enter min-h-screen">
-      {/* PR Notifications */}
-      {prNotifications.map((pr, i) => (
-        <PRNotificationBanner
-          key={i}
-          notification={pr}
-          onDismiss={() => dismissPRNotification(i)}
-        />
-      ))}
+      {/* PR Notifications (active sessions only) */}
+      {!isCompleted &&
+        prNotifications.map((pr, i) => (
+          <PRNotificationBanner
+            key={i}
+            notification={pr}
+            onDismiss={() => dismissPRNotification(i)}
+          />
+        ))}
 
       <Header
-        title={activeSession ? `${t('session')} #${activeSession.session_number}` : t('title')}
+        title={
+          sessionData
+            ? `${t('session')} #${sessionData.session_number}`
+            : t('title')
+        }
         showBack
         rightElement={
           <div className="flex items-center gap-2">
-            {isWorkoutActive && (
+            {/* Timer — active sessions */}
+            {!isCompleted && isWorkoutActive && (
               <div className="flex items-center gap-1 text-sm font-mono bg-primary/10 px-2 py-1 rounded-md">
                 <Clock className="h-3.5 w-3.5 text-primary" />
-                <span className="text-primary font-semibold">{formatElapsed(elapsedTime)}</span>
+                <span className="text-primary font-semibold">
+                  {formatElapsed(elapsedTime)}
+                </span>
               </div>
+            )}
+            {/* Edit / View toggle — completed sessions */}
+            {isCompleted && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs h-8 px-2"
+                onClick={() => setIsEditMode((v) => !v)}
+              >
+                {isEditMode ? (
+                  <>
+                    <Eye className="h-3.5 w-3.5" />
+                    {t('viewMode')}
+                  </>
+                ) : (
+                  <>
+                    <Edit2 className="h-3.5 w-3.5" />
+                    {t('editMode')}
+                  </>
+                )}
+              </Button>
             )}
           </div>
         }
       />
 
       <div className="p-4 space-y-4 pb-32">
-        {/* Session Stats */}
+        {/* ── Session Stats ── */}
         <div className="grid grid-cols-3 gap-2">
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-xl font-bold">{activeExercises.length}</p>
+              <p className="text-xl font-bold">{displayExercises.length}</p>
               <p className="text-xs text-muted-foreground">{t('exercises')}</p>
             </CardContent>
           </Card>
@@ -241,79 +376,134 @@ export default function WorkoutSessionPage() {
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-xl font-bold font-mono">{formatElapsed(elapsedTime)}</p>
-              <p className="text-xs text-muted-foreground">{t('timer')}</p>
+              {isCompleted ? (
+                <>
+                  <p className="text-xl font-bold font-mono">
+                    {sessionData?.duration
+                      ? formatDuration(sessionData.duration)
+                      : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t('duration')}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xl font-bold font-mono">
+                    {formatElapsed(elapsedTime)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t('timer')}</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Exercises */}
-        {activeExercises.length === 0 ? (
+        {/* ── Completed badge ── */}
+        {isCompleted && (
+          <div className="flex items-center gap-2 px-1">
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <span className="text-sm text-green-600 font-medium">
+              {t('completedOn')} · {sessionData?.date}
+            </span>
+            {isEditMode && (
+              <span className="ml-auto text-xs text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded-full">
+                {t('editingSession')}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── Exercises ── */}
+        {displayExercises.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
               <Dumbbell className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
               <p className="font-medium mb-1">{t('noExercises')}</p>
-              <p className="text-sm text-muted-foreground mb-4">{t('noExercisesDesc')}</p>
-              <Button onClick={() => setShowExerciseSelector(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                {t('addExercise')}
-              </Button>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t('noExercisesDesc')}
+              </p>
+              {canEdit && (
+                <Button
+                  onClick={() => setShowExerciseSelector(true)}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('addExercise')}
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-3">
-            {activeExercises.map((workoutExercise) => (
+            {displayExercises.map((workoutExercise) => (
               <ExerciseCard
                 key={workoutExercise.id}
                 workoutExercise={workoutExercise}
                 isExpanded={expandedExercises.has(workoutExercise.id)}
                 onToggle={() => toggleExercise(workoutExercise.id)}
                 onAddSet={() => handleAddSet(workoutExercise)}
-                onDeleteSet={(setId) => handleDeleteSet(workoutExercise.id, setId)}
-                onDeleteExercise={() => handleDeleteExercise(workoutExercise.id)}
-                setInput={activeSetInputs[workoutExercise.id] || emptySetInput}
-                onInputChange={(field, value) => updateSetInput(workoutExercise.id, field, value)}
+                onDeleteSet={(setId) =>
+                  handleDeleteSet(workoutExercise.id, setId)
+                }
+                onDeleteExercise={() =>
+                  handleDeleteExercise(workoutExercise.id)
+                }
+                setInput={
+                  displaySetInputs[workoutExercise.id] || emptySetInput
+                }
+                onInputChange={(field, value) => {
+                  if (isCompleted) {
+                    updateLocalSetInput(workoutExercise.id, field, value);
+                  } else {
+                    updateSetInput(workoutExercise.id, field, value);
+                  }
+                }}
                 tWorkouts={t}
+                tCommon={tCommon}
+                readOnly={isCompleted && !isEditMode}
               />
             ))}
           </div>
         )}
 
-        {/* Add Exercise Button */}
-        <Button
-          variant="outline"
-          className="w-full gap-2 border-dashed"
-          onClick={() => setShowExerciseSelector(true)}
-        >
-          <Plus className="h-4 w-4" />
-          {t('addExercise')}
-        </Button>
+        {/* ── Add Exercise button (active or edit mode) ── */}
+        {canEdit && (
+          <Button
+            variant="outline"
+            className="w-full gap-2 border-dashed"
+            onClick={() => setShowExerciseSelector(true)}
+          >
+            <Plus className="h-4 w-4" />
+            {t('addExercise')}
+          </Button>
+        )}
       </div>
 
-      {/* Finish Workout Button - Fixed at bottom */}
-      <div className="fixed bottom-20 left-0 right-0 p-4 bg-background/95 backdrop-blur border-t max-w-lg mx-auto">
-        <Button
-          className="w-full h-12 gap-2 text-base"
-          onClick={handleFinishWorkout}
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            tCommon('saving')
-          ) : (
-            <>
-              <CheckCircle2 className="h-5 w-5" />
-              {t('finishWorkout')}
-            </>
-          )}
-        </Button>
-      </div>
+      {/* ── Finish Workout — active sessions only ── */}
+      {!isCompleted && (
+        <div className="fixed bottom-20 left-0 right-0 p-4 bg-background/95 backdrop-blur border-t max-w-lg mx-auto">
+          <Button
+            className="w-full h-12 gap-2 text-base"
+            onClick={handleFinishWorkout}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              tCommon('saving')
+            ) : (
+              <>
+                <CheckCircle2 className="h-5 w-5" />
+                {t('finishWorkout')}
+              </>
+            )}
+          </Button>
+        </div>
+      )}
 
-      {/* Exercise Selector */}
+      {/* ── Exercise Selector ── */}
       <ExerciseSelector
         open={showExerciseSelector}
         onClose={() => setShowExerciseSelector(false)}
         onSelect={handleAddExercise}
-        excludeIds={activeExercises.map((e) => e.exercise_id)}
+        excludeIds={displayExercises.map((e) => e.exercise_id)}
       />
     </div>
   );
@@ -332,6 +522,8 @@ interface ExerciseCardProps {
   setInput: ActiveSet;
   onInputChange: (field: keyof ActiveSet, value: string) => void;
   tWorkouts: (key: string) => string;
+  tCommon: (key: string) => string;
+  readOnly?: boolean;
 }
 
 function ExerciseCard({
@@ -344,6 +536,8 @@ function ExerciseCard({
   setInput,
   onInputChange,
   tWorkouts,
+  tCommon,
+  readOnly = false,
 }: ExerciseCardProps) {
   const exercise = workoutExercise.exercise;
   const sets = workoutExercise.sets || [];
@@ -364,21 +558,30 @@ function ExerciseCard({
           <div>
             <p className="font-semibold text-sm">{exercise?.name}</p>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{exercise?.muscle_group}</span>
+              <span className="text-xs text-muted-foreground">
+                {exercise?.muscle_group}
+              </span>
               <span className="text-xs text-muted-foreground">·</span>
-              <span className="text-xs text-muted-foreground">{sets.length} sets</span>
+              <span className="text-xs text-muted-foreground">
+                {sets.length} {tCommon('sets')}
+              </span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-            onClick={(e) => { e.stopPropagation(); onDeleteExercise(); }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {!readOnly && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteExercise();
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
           {isExpanded ? (
             <ChevronUp className="h-4 w-4 text-muted-foreground" />
           ) : (
@@ -389,7 +592,7 @@ function ExerciseCard({
 
       {isExpanded && (
         <div className="border-t">
-          {/* Logged Sets */}
+          {/* Logged Sets Table */}
           {sets.length > 0 && (
             <div className="px-4 pt-3 pb-2">
               <div className="grid grid-cols-12 gap-1 text-xs text-muted-foreground mb-2 px-1">
@@ -397,7 +600,7 @@ function ExerciseCard({
                 <span className="col-span-3">{tWorkouts('weight')}</span>
                 <span className="col-span-3">{tWorkouts('reps')}</span>
                 <span className="col-span-3">{tWorkouts('rir')}</span>
-                <span className="col-span-2"></span>
+                <span className="col-span-2" />
               </div>
               <div className="space-y-1.5">
                 {sets.map((set) => (
@@ -405,62 +608,65 @@ function ExerciseCard({
                     key={set.id}
                     set={set}
                     onDelete={() => onDeleteSet(set.id)}
+                    readOnly={readOnly}
                   />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Set Input */}
-          <div className="p-4 bg-muted/30">
-            <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">
-              {tWorkouts('logSet')} {sets.length + 1}
-            </p>
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <div>
-                <Label className="text-xs mb-1 block">{tWorkouts('weight')}</Label>
-                <Input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  placeholder="0"
-                  value={setInput.weight || ''}
-                  onChange={(e) => onInputChange('weight', e.target.value)}
-                  inputMode="decimal"
-                  className="text-center text-lg font-bold h-12"
-                />
+          {/* Set Input — hidden in read-only mode */}
+          {!readOnly && (
+            <div className="p-4 bg-muted/30">
+              <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">
+                {tWorkouts('logSet')} {sets.length + 1}
+              </p>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div>
+                  <Label className="text-xs mb-1 block">{tWorkouts('weight')}</Label>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    placeholder="0"
+                    value={setInput.weight || ''}
+                    onChange={(e) => onInputChange('weight', e.target.value)}
+                    inputMode="decimal"
+                    className="text-center text-lg font-bold h-12"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">{tWorkouts('reps')}</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={setInput.reps_done || ''}
+                    onChange={(e) => onInputChange('reps_done', e.target.value)}
+                    inputMode="numeric"
+                    className="text-center text-lg font-bold h-12"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">{tWorkouts('rir')}</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="10"
+                    placeholder="0"
+                    value={setInput.rir_done || ''}
+                    onChange={(e) => onInputChange('rir_done', e.target.value)}
+                    inputMode="numeric"
+                    className="text-center text-lg font-bold h-12"
+                  />
+                </div>
               </div>
-              <div>
-                <Label className="text-xs mb-1 block">{tWorkouts('reps')}</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  value={setInput.reps_done || ''}
-                  onChange={(e) => onInputChange('reps_done', e.target.value)}
-                  inputMode="numeric"
-                  className="text-center text-lg font-bold h-12"
-                />
-              </div>
-              <div>
-                <Label className="text-xs mb-1 block">{tWorkouts('rir')}</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="10"
-                  placeholder="0"
-                  value={setInput.rir_done || ''}
-                  onChange={(e) => onInputChange('rir_done', e.target.value)}
-                  inputMode="numeric"
-                  className="text-center text-lg font-bold h-12"
-                />
-              </div>
+              <Button className="w-full gap-2" onClick={onAddSet}>
+                <Plus className="h-4 w-4" />
+                {tWorkouts('addSet')}
+              </Button>
             </div>
-            <Button className="w-full gap-2" onClick={onAddSet}>
-              <Plus className="h-4 w-4" />
-              {tWorkouts('addSet')}
-            </Button>
-          </div>
+          )}
         </div>
       )}
     </Card>
@@ -470,11 +676,21 @@ function ExerciseCard({
 // ============================================================
 // SET ROW COMPONENT
 // ============================================================
-function SetRow({ set, onDelete }: { set: WorkoutSet; onDelete: () => void }) {
+function SetRow({
+  set,
+  onDelete,
+  readOnly = false,
+}: {
+  set: WorkoutSet;
+  onDelete: () => void;
+  readOnly?: boolean;
+}) {
   return (
-    <div className={`grid grid-cols-12 gap-1 items-center py-1.5 px-1 rounded-md ${
-      set.is_pr ? 'bg-yellow-50 dark:bg-yellow-950/20' : ''
-    }`}>
+    <div
+      className={`grid grid-cols-12 gap-1 items-center py-1.5 px-1 rounded-md ${
+        set.is_pr ? 'bg-yellow-50 dark:bg-yellow-950/20' : ''
+      }`}
+    >
       <span className="col-span-1 text-xs text-muted-foreground font-medium">
         {set.set_number}
       </span>
@@ -484,25 +700,31 @@ function SetRow({ set, onDelete }: { set: WorkoutSet; onDelete: () => void }) {
       <span className="col-span-3 text-sm font-semibold">
         {set.reps_done ?? '—'}
         {set.reps_target && (
-          <span className="text-xs text-muted-foreground">/{set.reps_target}</span>
+          <span className="text-xs text-muted-foreground">
+            /{set.reps_target}
+          </span>
         )}
       </span>
       <span className="col-span-3 text-sm font-semibold">
         {set.rir_done !== null && set.rir_done !== undefined ? set.rir_done : '—'}
         {set.rir_target !== null && set.rir_target !== undefined && (
-          <span className="text-xs text-muted-foreground">/{set.rir_target}</span>
+          <span className="text-xs text-muted-foreground">
+            /{set.rir_target}
+          </span>
         )}
       </span>
       <div className="col-span-2 flex items-center justify-end gap-1">
         {set.is_pr && <Trophy className="h-3.5 w-3.5 text-yellow-500" />}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-        >
-          <X className="h-3 w-3" />
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
       </div>
     </div>
   );

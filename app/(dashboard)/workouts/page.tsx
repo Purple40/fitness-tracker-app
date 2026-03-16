@@ -62,7 +62,7 @@ export default function WorkoutsPage() {
     if (error) {
       toast({ title: tCommon('error'), description: error, variant: 'destructive' });
     } else {
-      toast({ title: t('deleteSuccess') });
+      toast({ title: '✓ ' + t('deleteSuccess'), variant: 'success' });
     }
   };
 
@@ -101,17 +101,15 @@ export default function WorkoutsPage() {
           </Card>
         )}
 
-        {/* Start Workout Button */}
-        {!isWorkoutActive && (
-          <Button
-            className="w-full h-14 text-base gap-2"
-            onClick={handleStartWorkout}
-            disabled={isStarting}
-          >
-            <Plus className="h-5 w-5" />
-            {isStarting ? tCommon('loading') : t('startNew')}
-          </Button>
-        )}
+        {/* Start Workout Button — always visible */}
+        <Button
+          className="w-full h-14 text-base gap-2"
+          onClick={handleStartWorkout}
+          disabled={isStarting}
+        >
+          <Plus className="h-5 w-5" />
+          {isStarting ? tCommon('loading') : t('startNew')}
+        </Button>
 
         {/* Stats Row */}
         <div className="grid grid-cols-3 gap-3">

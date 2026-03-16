@@ -4,6 +4,15 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { NextIntlClientProvider, AbstractIntlMessages } from 'next-intl';
 import { Locale, defaultLocale, isValidLocale } from '@/lib/i18n';
 
+// Static imports — always available synchronously, no dynamic loading needed
+import enMessages from '@/messages/en.json';
+import esMessages from '@/messages/es.json';
+
+const messagesMap: Record<Locale, AbstractIntlMessages> = {
+  en: enMessages as AbstractIntlMessages,
+  es: esMessages as AbstractIntlMessages,
+};
+
 const LOCALE_STORAGE_KEY = 'fittrack_locale';
 
 interface LocaleContextValue {
@@ -24,50 +33,37 @@ interface LocaleProviderProps {
   children: React.ReactNode;
 }
 
-export function LocaleProvider({ children }: LocaleProviderProps) {
+export function LocaleProvider({ children }: LocaleProviderProps): React.ReactElement {
+  // Always start with defaultLocale to match SSR output (no hydration mismatch)
   const [locale, setLocaleState] = useState<Locale>(defaultLocale);
-  const [messages, setMessages] = useState<AbstractIntlMessages | null>(null);
-  const [mounted, setMounted] = useState(false);
 
-  // Load locale from localStorage on mount
+  // After mount, silently sync locale from localStorage — no loading screen needed
+  // because messages are statically imported and always available
   useEffect(() => {
-    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-    const resolved = stored && isValidLocale(stored) ? stored : defaultLocale;
-    setLocaleState(resolved);
-    setMounted(true);
+    try {
+      const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+      if (stored && isValidLocale(stored) && stored !== defaultLocale) {
+        setLocaleState(stored as Locale);
+      }
+    } catch (_e) {
+      // localStorage unavailable — stay with default
+    }
   }, []);
 
-  // Load messages whenever locale changes
-  useEffect(() => {
-    if (!mounted) return;
-    import(`@/messages/${locale}.json`)
-      .then((mod) => setMessages(mod.default as AbstractIntlMessages))
-      .catch(() => {
-        // Fallback to English
-        import('@/messages/en.json').then((mod) => setMessages(mod.default as AbstractIntlMessages));
-      });
-  }, [locale, mounted]);
-
   const setLocale = useCallback((newLocale: Locale) => {
-    localStorage.setItem(LOCALE_STORAGE_KEY, newLocale);
+    try {
+      localStorage.setItem(LOCALE_STORAGE_KEY, newLocale);
+    } catch (_e) {
+      // ignore
+    }
     setLocaleState(newLocale);
   }, []);
 
-  // Render nothing until mounted (avoids hydration mismatch)
-  if (!mounted || !messages) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-          <p className="text-sm text-muted-foreground">Loading FitTrack...</p>
-        </div>
-      </div>
-    );
-  }
+  const messages = messagesMap[locale] ?? messagesMap[defaultLocale];
 
   return (
     <LocaleContext.Provider value={{ locale, setLocale }}>
-      <NextIntlClientProvider locale={locale} messages={messages}>
+      <NextIntlClientProvider locale={locale} messages={messages} timeZone="UTC">
         {children}
       </NextIntlClientProvider>
     </LocaleContext.Provider>

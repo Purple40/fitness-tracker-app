@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { localBodyMetrics } from '@/lib/localDb';
 import { BodyMetric, WeeklyBodyStats } from '@/types';
-import { getTodayString, formatDateInput } from '@/lib/utils';
-import { startOfWeek, endOfWeek, subWeeks, format } from 'date-fns';
+import { getTodayString } from '@/lib/utils';
+import { startOfWeek, format } from 'date-fns';
 
 export function useBodyMetrics() {
   const [metrics, setMetrics] = useState<BodyMetric[]>([]);
@@ -11,30 +12,34 @@ export function useBodyMetrics() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabase = isSupabaseConfigured ? createClient() : null;
 
   const fetchMetrics = useCallback(async (limit = 90) => {
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
-        .from('body_metrics')
-        .select('*')
-        .order('date', { ascending: false })
-        .limit(limit);
+      let data: BodyMetric[];
 
-      if (err) throw err;
-      setMetrics(data || []);
+      if (!supabase) {
+        const { data: localData } = localBodyMetrics.getAll();
+        data = ((localData || []) as unknown as BodyMetric[]).slice(0, limit);
+      } else {
+        const { data: remoteData, error: err } = await supabase
+          .from('body_metrics')
+          .select('*')
+          .order('date', { ascending: false })
+          .limit(limit);
+        if (err) throw err;
+        data = remoteData || [];
+      }
 
-      // Set today's metric
+      setMetrics(data);
+
       const today = getTodayString();
-      const todayData = data?.find((m) => m.date === today) || null;
-      setTodayMetric(todayData);
+      setTodayMetric(data.find((m) => m.date === today) || null);
 
-      // Calculate weekly stats
-      if (data && data.length > 0) {
-        const stats = calculateWeeklyStats(data);
-        setWeeklyStats(stats);
+      if (data.length > 0) {
+        setWeeklyStats(calculateWeeklyStats(data));
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch body metrics');
@@ -51,15 +56,22 @@ export function useBodyMetrics() {
   }) => {
     setError(null);
     try {
-      const { data: result, error: err } = await supabase
-        .from('body_metrics')
-        .upsert(data, { onConflict: 'user_id,date' })
-        .select()
-        .single();
+      let result: BodyMetric;
 
-      if (err) throw err;
+      if (!supabase) {
+        const { data: r, error: e } = localBodyMetrics.upsert(data as Record<string, unknown>);
+        if (e) throw new Error(e);
+        result = r as unknown as BodyMetric;
+      } else {
+        const { data: r, error: err } = await supabase
+          .from('body_metrics')
+          .upsert(data, { onConflict: 'user_id,date' })
+          .select()
+          .single();
+        if (err) throw err;
+        result = r;
+      }
 
-      // Update local state
       setMetrics((prev) => {
         const exists = prev.findIndex((m) => m.date === data.date);
         if (exists >= 0) {
@@ -84,12 +96,15 @@ export function useBodyMetrics() {
 
   const deleteMetric = useCallback(async (id: string) => {
     try {
-      const { error: err } = await supabase
-        .from('body_metrics')
-        .delete()
-        .eq('id', id);
-
-      if (err) throw err;
+      if (!supabase) {
+        localBodyMetrics.delete(id);
+      } else {
+        const { error: err } = await supabase
+          .from('body_metrics')
+          .delete()
+          .eq('id', id);
+        if (err) throw err;
+      }
 
       setMetrics((prev) => prev.filter((m) => m.id !== id));
       if (todayMetric?.id === id) setTodayMetric(null);

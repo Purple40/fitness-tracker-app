@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Header } from '@/components/layout/Header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { TrendingUp, Dumbbell, BarChart3, Trophy, Camera } from 'lucide-react';
+import { TrendingUp, Dumbbell, BarChart3, Trophy } from 'lucide-react';
 import { useProgress } from '@/lib/hooks/useProgress';
 import { useWorkouts } from '@/lib/hooks/useWorkouts';
 import { WeightProgressChart } from '@/components/progress/WeightProgressChart';
@@ -14,6 +14,9 @@ import { VolumeChart } from '@/components/progress/VolumeChart';
 import { PRList } from '@/components/progress/PRList';
 
 export default function ProgressPage() {
+  const t = useTranslations('progress');
+  const tCommon = useTranslations('common');
+
   const [selectedExerciseId, setSelectedExerciseId] = useState<string>('');
 
   const { weightProgress, muscleVolume, personalRecords, isLoading } = useProgress();
@@ -27,7 +30,7 @@ export default function ProgressPage() {
 
   return (
     <div className="page-enter">
-      <Header title="Progress" showSettings />
+      <Header title={t('title')} showSettings />
 
       <div className="p-4 space-y-4">
         {/* Summary Stats */}
@@ -35,19 +38,19 @@ export default function ProgressPage() {
           <Card>
             <CardContent className="p-3 text-center">
               <p className="text-2xl font-bold">{personalRecords.length}</p>
-              <p className="text-xs text-muted-foreground">Total PRs</p>
+              <p className="text-xs text-muted-foreground">{t('totalPRs')}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
               <p className="text-2xl font-bold">{loggedExercises.length}</p>
-              <p className="text-xs text-muted-foreground">Exercises</p>
+              <p className="text-xs text-muted-foreground">{t('exercises')}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
               <p className="text-2xl font-bold">{weightProgress.length}</p>
-              <p className="text-xs text-muted-foreground">Weigh-ins</p>
+              <p className="text-xs text-muted-foreground">{t('weighIns')}</p>
             </CardContent>
           </Card>
         </div>
@@ -57,19 +60,19 @@ export default function ProgressPage() {
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="weight" className="text-xs gap-1">
               <TrendingUp className="h-3 w-3" />
-              Weight
+              {t('weightTab')}
             </TabsTrigger>
             <TabsTrigger value="strength" className="text-xs gap-1">
               <Dumbbell className="h-3 w-3" />
-              Strength
+              {t('strengthTab')}
             </TabsTrigger>
             <TabsTrigger value="volume" className="text-xs gap-1">
               <BarChart3 className="h-3 w-3" />
-              Volume
+              {t('volumeTab')}
             </TabsTrigger>
             <TabsTrigger value="prs" className="text-xs gap-1">
               <Trophy className="h-3 w-3" />
-              PRs
+              {t('prsTab')}
             </TabsTrigger>
           </TabsList>
 
@@ -78,7 +81,7 @@ export default function ProgressPage() {
             {isLoading ? (
               <Card>
                 <CardContent className="p-8 text-center text-muted-foreground">
-                  Loading...
+                  {tCommon('loading')}
                 </CardContent>
               </Card>
             ) : weightProgress.length === 0 ? (
@@ -86,7 +89,7 @@ export default function ProgressPage() {
                 <CardContent className="p-8 text-center">
                   <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    No weight data yet. Start logging your weight in the Body section.
+                    {t('noWeightData')}
                   </p>
                 </CardContent>
               </Card>
@@ -102,13 +105,13 @@ export default function ProgressPage() {
                 <CardContent className="p-8 text-center">
                   <Dumbbell className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    No workout data yet. Log some workouts to see strength progress.
+                    {t('noStrengthData')}
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <>
-                {/* Exercise Selector */}
+                {/* Exercise Selector Pills */}
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                   {loggedExercises.map((ex) => (
                     <button
@@ -124,8 +127,14 @@ export default function ProgressPage() {
                     </button>
                   ))}
                 </div>
-                {displayExerciseId && (
+                {displayExerciseId ? (
                   <StrengthChart exerciseId={displayExerciseId} />
+                ) : (
+                  <Card>
+                    <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                      {t('selectExercise')}
+                    </CardContent>
+                  </Card>
                 )}
               </>
             )}
@@ -138,7 +147,7 @@ export default function ProgressPage() {
                 <CardContent className="p-8 text-center">
                   <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    No volume data yet. Log workouts to see muscle group volume.
+                    {t('noVolumeData')}
                   </p>
                 </CardContent>
               </Card>
@@ -154,7 +163,7 @@ export default function ProgressPage() {
                 <CardContent className="p-8 text-center">
                   <Trophy className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    No personal records yet. Keep training to set new PRs!
+                    {t('noPRs')}
                   </p>
                 </CardContent>
               </Card>
