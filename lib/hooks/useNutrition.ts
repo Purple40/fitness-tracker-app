@@ -89,9 +89,11 @@ export function useNutrition() {
         if (e) throw new Error(e);
         result = r as unknown as NutritionLog;
       } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
         const { data: r, error: err } = await supabase
           .from('nutrition_logs')
-          .upsert(data, { onConflict: 'user_id,date' })
+          .upsert({ ...data, user_id: user.id }, { onConflict: 'user_id,date' })
           .select()
           .single();
         if (err) throw err;
@@ -148,15 +150,20 @@ export function useNutrition() {
         if (e) throw new Error(e);
         result = r as unknown as NutritionLog;
       } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
         // Fetch current today's log from Supabase
         const { data: current } = await supabase
           .from('nutrition_logs')
           .select('*')
           .eq('date', today)
+          .eq('user_id', user.id)
           .maybeSingle();
 
         const merged = {
           date: today,
+          user_id: user.id,
           calories_consumed: (current?.calories_consumed || 0) + meal.calories,
           protein_consumed: (current?.protein_consumed || 0) + meal.protein,
           carbs_consumed: (current?.carbs_consumed || 0) + meal.carbs,
@@ -213,9 +220,11 @@ export function useNutrition() {
         if (e) throw new Error(e);
         result = r as unknown as NutritionLog;
       } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
         const { data: r, error: err } = await supabase
           .from('nutrition_logs')
-          .upsert(resetData, { onConflict: 'user_id,date' })
+          .upsert({ ...resetData, user_id: user.id }, { onConflict: 'user_id,date' })
           .select()
           .single();
         if (err) throw err;
@@ -277,9 +286,11 @@ export function useNutrition() {
         if (e) throw new Error(e);
         result = r as unknown as MacroTarget;
       } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
         const { data: r, error: err } = await supabase
           .from('macro_targets')
-          .upsert(targets, { onConflict: 'user_id' })
+          .upsert({ ...targets, user_id: user.id }, { onConflict: 'user_id' })
           .select()
           .single();
         if (err) throw err;

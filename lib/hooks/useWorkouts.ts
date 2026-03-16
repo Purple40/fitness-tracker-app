@@ -30,20 +30,26 @@ export function useWorkouts() {
         setSessions((data || []) as unknown as WorkoutSession[]);
         return;
       }
-      const { data, error: err } = await supabase
-        .from('workout_sessions')
-        .select(`
-          *,
-          workout_exercises (
+      try {
+        const { data, error: err } = await supabase
+          .from('workout_sessions')
+          .select(`
             *,
-            exercise:exercises(*),
-            sets:workout_sets(*)
-          )
-        `)
-        .order('date', { ascending: false })
-        .limit(limit);
-      if (err) throw err;
-      setSessions(data || []);
+            workout_exercises (
+              *,
+              exercise:exercises(*),
+              sets:workout_sets(*)
+            )
+          `)
+          .order('date', { ascending: false })
+          .limit(limit);
+        if (err) throw err;
+        setSessions(data || []);
+      } catch {
+        // Supabase unavailable — fall back to localStorage
+        const { data } = localWorkouts.getSessions(limit);
+        setSessions((data || []) as unknown as WorkoutSession[]);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch sessions');
     } finally {
@@ -60,12 +66,18 @@ export function useWorkouts() {
         setExercises((data || []) as unknown as Exercise[]);
         return;
       }
-      const { data, error: err } = await supabase
-        .from('exercises')
-        .select('*')
-        .order('name');
-      if (err) throw err;
-      setExercises(data || []);
+      try {
+        const { data, error: err } = await supabase
+          .from('exercises')
+          .select('*')
+          .order('name');
+        if (err) throw err;
+        setExercises(data || []);
+      } catch {
+        // Supabase unavailable — fall back to localStorage
+        const { data } = localWorkouts.getExercises();
+        setExercises((data || []) as unknown as Exercise[]);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch exercises');
     }
@@ -80,20 +92,27 @@ export function useWorkouts() {
         if (e) throw new Error(e);
         return { data: data as unknown as WorkoutSession, error: null };
       }
-      const { data, error: err } = await supabase
-        .from('workout_sessions')
-        .select(`
-          *,
-          exercises:workout_exercises (
+      try {
+        const { data, error: err } = await supabase
+          .from('workout_sessions')
+          .select(`
             *,
-            exercise:exercises(*),
-            sets:workout_sets(*)
-          )
-        `)
-        .eq('id', sessionId)
-        .single();
-      if (err) throw err;
-      return { data: data as WorkoutSession, error: null };
+            exercises:workout_exercises (
+              *,
+              exercise:exercises(*),
+              sets:workout_sets(*)
+            )
+          `)
+          .eq('id', sessionId)
+          .single();
+        if (err) throw err;
+        return { data: data as WorkoutSession, error: null };
+      } catch {
+        // Supabase unavailable — fall back to localStorage
+        const { data, error: e } = localWorkouts.getSessionById(sessionId);
+        if (e) throw new Error(e);
+        return { data: data as unknown as WorkoutSession, error: null };
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to fetch session';
       return { data: null, error: message };
@@ -116,14 +135,26 @@ export function useWorkouts() {
         setSessions((prev) => [session, ...prev]);
         return { data: session, error: null };
       }
-      const { data, error: err } = await supabase
-        .from('workout_sessions')
-        .insert(sessionData)
-        .select()
-        .single();
-      if (err) throw err;
-      await fetchSessions();
-      return { data: data as WorkoutSession, error: null };
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+        const { data, error: err } = await supabase
+          .from('workout_sessions')
+          .insert({ ...sessionData, user_id: user.id })
+          .select()
+          .single();
+        if (err) throw err;
+        await fetchSessions();
+        return { data: data as WorkoutSession, error: null };
+      } catch (e) {
+        // If auth error, re-throw; otherwise fall back to localStorage
+        if (e instanceof Error && e.message === 'Not authenticated') throw e;
+        const { data, error: le } = localWorkouts.createSession(sessionData as Record<string, unknown>);
+        if (le) throw new Error(le);
+        const session = data as unknown as WorkoutSession;
+        setSessions((prev) => [session, ...prev]);
+        return { data: session, error: null };
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create session';
       return { data: null, error: message };
@@ -145,17 +176,27 @@ export function useWorkouts() {
         );
         return { data, error: null };
       }
-      const { data, error: err } = await supabase
-        .from('workout_sessions')
-        .update(updates)
-        .eq('id', sessionId)
-        .select()
-        .single();
-      if (err) throw err;
-      setSessions((prev) =>
-        prev.map((s) => (s.id === sessionId ? { ...s, ...data } : s))
-      );
-      return { data, error: null };
+      try {
+        const { data, error: err } = await supabase
+          .from('workout_sessions')
+          .update(updates)
+          .eq('id', sessionId)
+          .select()
+          .single();
+        if (err) throw err;
+        setSessions((prev) =>
+          prev.map((s) => (s.id === sessionId ? { ...s, ...data } : s))
+        );
+        return { data, error: null };
+      } catch {
+        // Supabase unavailable — fall back to localStorage
+        const { data, error: e } = localWorkouts.updateSession(sessionId, updates as Record<string, unknown>);
+        if (e) throw new Error(e);
+        setSessions((prev) =>
+          prev.map((s) => (s.id === sessionId ? { ...s, ...(data as unknown as WorkoutSession) } : s))
+        );
+        return { data, error: null };
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to update session';
       return { data: null, error: message };
@@ -171,11 +212,15 @@ export function useWorkouts() {
         setSessions((prev) => prev.filter((s) => s.id !== sessionId));
         return { error: null };
       }
-      const { error: err } = await supabase
-        .from('workout_sessions')
-        .delete()
-        .eq('id', sessionId);
-      if (err) throw err;
+      try {
+        const { error: err } = await supabase
+          .from('workout_sessions')
+          .delete()
+          .eq('id', sessionId);
+        if (err) throw err;
+      } catch {
+        localWorkouts.deleteSession(sessionId);
+      }
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       return { error: null };
     } catch (err: unknown) {
@@ -197,13 +242,20 @@ export function useWorkouts() {
         if (e) throw new Error(e);
         return { data: data as unknown as WorkoutExercise, error: null };
       }
-      const { data, error: err } = await supabase
-        .from('workout_exercises')
-        .insert({ session_id: sessionId, exercise_id: exerciseId, order_index: orderIndex })
-        .select(`*, exercise:exercises(*)`)
-        .single();
-      if (err) throw err;
-      return { data: { ...data, sets: [] } as WorkoutExercise, error: null };
+      try {
+        const { data, error: err } = await supabase
+          .from('workout_exercises')
+          .insert({ session_id: sessionId, exercise_id: exerciseId, order_index: orderIndex })
+          .select(`*, exercise:exercises(*)`)
+          .single();
+        if (err) throw err;
+        return { data: { ...data, sets: [] } as WorkoutExercise, error: null };
+      } catch {
+        // Supabase unavailable — fall back to localStorage
+        const { data, error: e } = localWorkouts.addExerciseToSession(sessionId, exerciseId, orderIndex);
+        if (e) throw new Error(e);
+        return { data: data as unknown as WorkoutExercise, error: null };
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to add exercise';
       return { data: null, error: message };
@@ -218,11 +270,15 @@ export function useWorkouts() {
         localWorkouts.deleteExerciseFromSession(workoutExerciseId);
         return { error: null };
       }
-      const { error: err } = await supabase
-        .from('workout_exercises')
-        .delete()
-        .eq('id', workoutExerciseId);
-      if (err) throw err;
+      try {
+        const { error: err } = await supabase
+          .from('workout_exercises')
+          .delete()
+          .eq('id', workoutExerciseId);
+        if (err) throw err;
+      } catch {
+        localWorkouts.deleteExerciseFromSession(workoutExerciseId);
+      }
       return { error: null };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to remove exercise';
@@ -252,13 +308,20 @@ export function useWorkouts() {
         if (e) throw new Error(e);
         newSet = data as unknown as WorkoutSet;
       } else {
-        const { data, error: err } = await supabase
-          .from('workout_sets')
-          .insert({ workout_exercise_id: workoutExerciseId, ...setData })
-          .select()
-          .single();
-        if (err) throw err;
-        newSet = data;
+        try {
+          const { data, error: err } = await supabase
+            .from('workout_sets')
+            .insert({ workout_exercise_id: workoutExerciseId, ...setData })
+            .select()
+            .single();
+          if (err) throw err;
+          newSet = data;
+        } catch {
+          // Supabase unavailable — fall back to localStorage
+          const { data, error: e } = localWorkouts.addSet(workoutExerciseId, setData as Record<string, unknown>);
+          if (e) throw new Error(e);
+          newSet = data as unknown as WorkoutSet;
+        }
       }
 
       await checkAndRecordPR(exerciseId, newSet);
@@ -289,26 +352,36 @@ export function useWorkouts() {
         const { data, error: e } = localWorkouts.addSet(workoutExerciseId, setData as Record<string, unknown>);
         if (e) throw new Error(e);
         newSet = data as unknown as WorkoutSet;
-        // Get exercise_id for PR check
         const { data: weData } = localWorkouts.getWorkoutExercise(workoutExerciseId);
         if (weData?.exercise_id) {
           await checkAndRecordPR(weData.exercise_id as string, newSet);
         }
       } else {
-        const { data, error: err } = await supabase
-          .from('workout_sets')
-          .insert({ workout_exercise_id: workoutExerciseId, ...setData })
-          .select()
-          .single();
-        if (err) throw err;
-        newSet = data;
-        const { data: weData } = await supabase
-          .from('workout_exercises')
-          .select('exercise_id')
-          .eq('id', workoutExerciseId)
-          .single();
-        if (weData?.exercise_id) {
-          await checkAndRecordPR(weData.exercise_id, newSet);
+        try {
+          const { data, error: err } = await supabase
+            .from('workout_sets')
+            .insert({ workout_exercise_id: workoutExerciseId, ...setData })
+            .select()
+            .single();
+          if (err) throw err;
+          newSet = data;
+          const { data: weData } = await supabase
+            .from('workout_exercises')
+            .select('exercise_id')
+            .eq('id', workoutExerciseId)
+            .single();
+          if (weData?.exercise_id) {
+            await checkAndRecordPR(weData.exercise_id, newSet);
+          }
+        } catch {
+          // Supabase unavailable — fall back to localStorage
+          const { data, error: e } = localWorkouts.addSet(workoutExerciseId, setData as Record<string, unknown>);
+          if (e) throw new Error(e);
+          newSet = data as unknown as WorkoutSet;
+          const { data: weData } = localWorkouts.getWorkoutExercise(workoutExerciseId);
+          if (weData?.exercise_id) {
+            await checkAndRecordPR(weData.exercise_id as string, newSet);
+          }
         }
       }
 
@@ -328,14 +401,20 @@ export function useWorkouts() {
         if (e) throw new Error(e);
         return { data, error: null };
       }
-      const { data, error: err } = await supabase
-        .from('workout_sets')
-        .update(updates)
-        .eq('id', setId)
-        .select()
-        .single();
-      if (err) throw err;
-      return { data, error: null };
+      try {
+        const { data, error: err } = await supabase
+          .from('workout_sets')
+          .update(updates)
+          .eq('id', setId)
+          .select()
+          .single();
+        if (err) throw err;
+        return { data, error: null };
+      } catch {
+        const { data, error: e } = localWorkouts.updateSet(setId, updates as Record<string, unknown>);
+        if (e) throw new Error(e);
+        return { data, error: null };
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to update set';
       return { data: null, error: message };
@@ -350,11 +429,15 @@ export function useWorkouts() {
         localWorkouts.deleteSet(setId);
         return { error: null };
       }
-      const { error: err } = await supabase
-        .from('workout_sets')
-        .delete()
-        .eq('id', setId);
-      if (err) throw err;
+      try {
+        const { error: err } = await supabase
+          .from('workout_sets')
+          .delete()
+          .eq('id', setId);
+        if (err) throw err;
+      } catch {
+        localWorkouts.deleteSet(setId);
+      }
       return { error: null };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to delete set';
@@ -371,11 +454,15 @@ export function useWorkouts() {
         await fetchSessions();
         return { error: null };
       }
-      const { error: err } = await supabase
-        .from('workout_sessions')
-        .update({ duration: durationMinutes })
-        .eq('id', sessionId);
-      if (err) throw err;
+      try {
+        const { error: err } = await supabase
+          .from('workout_sessions')
+          .update({ duration: durationMinutes })
+          .eq('id', sessionId);
+        if (err) throw err;
+      } catch {
+        localWorkouts.updateSession(sessionId, { duration: durationMinutes });
+      }
       await fetchSessions();
       return { error: null };
     } catch (err: unknown) {
@@ -399,9 +486,11 @@ export function useWorkouts() {
         setExercises((prev) => [...prev, newEx].sort((a, b) => a.name.localeCompare(b.name)));
         return { data: newEx, error: null };
       }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
       const { data, error: err } = await supabase
         .from('exercises')
-        .insert({ ...exercise, is_default: false })
+        .insert({ ...exercise, user_id: user.id, is_default: false })
         .select()
         .single();
       if (err) throw err;
@@ -445,16 +534,21 @@ export function useWorkouts() {
         return;
       }
 
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data: existingPR } = await supabase
         .from('personal_records')
         .select('*')
         .eq('exercise_id', exerciseId)
+        .eq('user_id', user.id)
         .eq('record_type', 'max_weight')
-        .single();
+        .maybeSingle();
 
       if (!existingPR || newSet.weight > existingPR.value) {
         await supabase.from('personal_records').upsert({
           exercise_id: exerciseId,
+          user_id: user.id,
           set_id: newSet.id,
           record_type: 'max_weight',
           value: newSet.weight,

@@ -24,13 +24,19 @@ export function useBodyMetrics() {
         const { data: localData } = localBodyMetrics.getAll();
         data = ((localData || []) as unknown as BodyMetric[]).slice(0, limit);
       } else {
-        const { data: remoteData, error: err } = await supabase
-          .from('body_metrics')
-          .select('*')
-          .order('date', { ascending: false })
-          .limit(limit);
-        if (err) throw err;
-        data = remoteData || [];
+        try {
+          const { data: remoteData, error: err } = await supabase
+            .from('body_metrics')
+            .select('*')
+            .order('date', { ascending: false })
+            .limit(limit);
+          if (err) throw err;
+          data = remoteData || [];
+        } catch {
+          // Supabase unavailable (schema not set up / not authenticated) — fall back to localStorage
+          const { data: localData } = localBodyMetrics.getAll();
+          data = ((localData || []) as unknown as BodyMetric[]).slice(0, limit);
+        }
       }
 
       setMetrics(data);
@@ -63,9 +69,12 @@ export function useBodyMetrics() {
         if (e) throw new Error(e);
         result = r as unknown as BodyMetric;
       } else {
+        // Get authenticated user ID — required by RLS policies
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
         const { data: r, error: err } = await supabase
           .from('body_metrics')
-          .upsert(data, { onConflict: 'user_id,date' })
+          .upsert({ ...data, user_id: user.id }, { onConflict: 'user_id,date' })
           .select()
           .single();
         if (err) throw err;
@@ -99,11 +108,15 @@ export function useBodyMetrics() {
       if (!supabase) {
         localBodyMetrics.delete(id);
       } else {
-        const { error: err } = await supabase
-          .from('body_metrics')
-          .delete()
-          .eq('id', id);
-        if (err) throw err;
+        try {
+          const { error: err } = await supabase
+            .from('body_metrics')
+            .delete()
+            .eq('id', id);
+          if (err) throw err;
+        } catch {
+          localBodyMetrics.delete(id);
+        }
       }
 
       setMetrics((prev) => prev.filter((m) => m.id !== id));

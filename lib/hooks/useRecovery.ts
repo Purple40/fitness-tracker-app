@@ -22,13 +22,19 @@ export function useRecovery() {
         const { data: localData } = localRecovery.getLogs();
         data = ((localData || []) as unknown as RecoveryMetric[]).slice(0, limit);
       } else {
-        const { data: remoteData, error: err } = await supabase
-          .from('recovery_metrics')
-          .select('*')
-          .order('date', { ascending: false })
-          .limit(limit);
-        if (err) throw err;
-        data = remoteData || [];
+        try {
+          const { data: remoteData, error: err } = await supabase
+            .from('recovery_metrics')
+            .select('*')
+            .order('date', { ascending: false })
+            .limit(limit);
+          if (err) throw err;
+          data = remoteData || [];
+        } catch {
+          // Supabase unavailable — fall back to localStorage
+          const { data: localData } = localRecovery.getLogs();
+          data = ((localData || []) as unknown as RecoveryMetric[]).slice(0, limit);
+        }
       }
 
       setMetrics(data);
@@ -58,9 +64,11 @@ export function useRecovery() {
         if (e) throw new Error(e);
         result = r as unknown as RecoveryMetric;
       } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
         const { data: r, error: err } = await supabase
           .from('recovery_metrics')
-          .upsert(data, { onConflict: 'user_id,date' })
+          .upsert({ ...data, user_id: user.id }, { onConflict: 'user_id,date' })
           .select()
           .single();
         if (err) throw err;
