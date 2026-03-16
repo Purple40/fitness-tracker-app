@@ -100,7 +100,8 @@
     "energy": "Energy",
     "fatigue": "Fatigue",
     "motivation": "Motivation",
-    "completed": "Completed"
+    "completed": "Completed",
+    "workout": "Start Workout"
   },
   "body": {
     "title": "Body Tracking",

@@ -100,7 +100,8 @@
     "energy": "Energía",
     "fatigue": "Fatiga",
     "motivation": "Motivación",
-    "completed": "Completado"
+    "completed": "Completado",
+    "workout": "Iniciar Entreno"
   },
   "body": {
     "title": "Seguimiento Corporal",
