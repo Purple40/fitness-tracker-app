@@ -44,3 +44,4 @@ public/fallback-*.js
 # IDE
 .vscode/
 .idea/
+nul
