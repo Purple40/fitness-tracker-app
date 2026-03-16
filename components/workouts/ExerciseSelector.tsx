@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,14 @@ interface ExerciseSelectorProps {
   excludeIds?: string[];
 }
 
-export function ExerciseSelector({ open, onClose, onSelect, excludeIds = [] }: ExerciseSelectorProps) {
+export function ExerciseSelector({
+  open,
+  onClose,
+  onSelect,
+  excludeIds = [],
+}: ExerciseSelectorProps) {
+  const t = useTranslations('workouts');
+
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | 'All'>('All');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -36,7 +44,7 @@ export function ExerciseSelector({ open, onClose, onSelect, excludeIds = [] }: E
       setSearch('');
       setSelectedMuscle('All');
     }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredExercises = useMemo(() => {
     return exercises.filter((ex) => {
@@ -57,12 +65,21 @@ export function ExerciseSelector({ open, onClose, onSelect, excludeIds = [] }: E
     return groups;
   }, [filteredExercises]);
 
+  // Translate muscle group name
+  const tMuscle = (mg: string) => {
+    try {
+      return t(`muscleGroups.${mg}` as Parameters<typeof t>[0]);
+    } catch {
+      return mg;
+    }
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
         <DialogContent className="max-w-sm mx-auto max-h-[85vh] flex flex-col p-0">
           <DialogHeader className="p-4 pb-0">
-            <DialogTitle>Select Exercise</DialogTitle>
+            <DialogTitle>{t('selectExercise')}</DialogTitle>
           </DialogHeader>
 
           {/* Search */}
@@ -70,11 +87,10 @@ export function ExerciseSelector({ open, onClose, onSelect, excludeIds = [] }: E
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search exercises..."
+                placeholder={t('searchExercises')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-                autoFocus
+                className="pl-9 h-10"
               />
             </div>
           </div>
@@ -82,46 +98,45 @@ export function ExerciseSelector({ open, onClose, onSelect, excludeIds = [] }: E
           {/* Muscle Group Filter */}
           <div className="px-4 pt-2">
             <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
-              <button
+              <Badge
+                variant={selectedMuscle === 'All' ? 'default' : 'outline'}
+                className="cursor-pointer whitespace-nowrap flex-shrink-0 text-xs px-2.5 py-1"
                 onClick={() => setSelectedMuscle('All')}
-                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  selectedMuscle === 'All'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground'
-                }`}
               >
-                All
-              </button>
+                {t('allMuscles')}
+              </Badge>
               {MUSCLE_GROUPS.map((mg) => (
-                <button
+                <Badge
                   key={mg}
-                  onClick={() => setSelectedMuscle(mg)}
-                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  variant={selectedMuscle === mg ? 'default' : 'outline'}
+                  className="cursor-pointer whitespace-nowrap flex-shrink-0 text-xs px-2.5 py-1"
+                  style={
                     selectedMuscle === mg
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-secondary-foreground'
-                  }`}
+                      ? {}
+                      : { borderColor: getMuscleGroupColor(mg) + '60' }
+                  }
+                  onClick={() => setSelectedMuscle(mg)}
                 >
-                  {mg}
-                </button>
+                  {tMuscle(mg)}
+                </Badge>
               ))}
             </div>
           </div>
 
           {/* Exercise List */}
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <div className="flex-1 overflow-y-auto px-4 pb-2">
             {filteredExercises.length === 0 ? (
-              <div className="text-center py-8">
-                <Dumbbell className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No exercises found</p>
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <Dumbbell className="h-10 w-10 text-muted-foreground mb-3" />
+                <p className="text-sm text-muted-foreground">{t('noResults')}</p>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-3 gap-1"
+                  className="mt-3 gap-1.5"
                   onClick={() => setShowCreateDialog(true)}
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Create Custom
+                  {t('createCustom')}
                 </Button>
               </div>
             ) : (
@@ -134,7 +149,7 @@ export function ExerciseSelector({ open, onClose, onSelect, excludeIds = [] }: E
                         style={{ backgroundColor: getMuscleGroupColor(muscleGroup) }}
                       />
                       <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        {muscleGroup}
+                        {tMuscle(muscleGroup)}
                       </span>
                     </div>
                     <div className="space-y-1">
@@ -146,7 +161,9 @@ export function ExerciseSelector({ open, onClose, onSelect, excludeIds = [] }: E
                         >
                           <div>
                             <p className="text-sm font-medium">{exercise.name}</p>
-                            <p className="text-xs text-muted-foreground">{exercise.exercise_type}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {tExerciseType(exercise.exercise_type, t)}
+                            </p>
                           </div>
                           <Plus className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         </button>
@@ -166,7 +183,7 @@ export function ExerciseSelector({ open, onClose, onSelect, excludeIds = [] }: E
               onClick={() => setShowCreateDialog(true)}
             >
               <Plus className="h-4 w-4" />
-              Create Custom Exercise
+              {t('createNew')}
             </Button>
           </div>
         </DialogContent>
@@ -182,4 +199,16 @@ export function ExerciseSelector({ open, onClose, onSelect, excludeIds = [] }: E
       />
     </>
   );
+}
+
+// Helper to translate exercise type
+function tExerciseType(
+  type: string,
+  t: (key: string) => string
+): string {
+  try {
+    return t(`exerciseTypes.${type}` as Parameters<typeof t>[0]);
+  } catch {
+    return type;
+  }
 }

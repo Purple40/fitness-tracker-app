@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +23,14 @@ interface CreateExerciseDialogProps {
   onCreated: (exercise: Exercise) => void;
 }
 
-export function CreateExerciseDialog({ open, onClose, onCreated }: CreateExerciseDialogProps) {
+export function CreateExerciseDialog({
+  open,
+  onClose,
+  onCreated,
+}: CreateExerciseDialogProps) {
+  const t = useTranslations('workouts');
+  const tCommon = useTranslations('common');
+
   const [name, setName] = useState('');
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>('Chest');
   const [exerciseType, setExerciseType] = useState<ExerciseType>('Compound');
@@ -43,11 +51,29 @@ export function CreateExerciseDialog({ open, onClose, onCreated }: CreateExercis
     setIsLoading(false);
 
     if (error) {
-      toast({ title: 'Error', description: error, variant: 'destructive' });
+      toast({ title: tCommon('error'), description: error, variant: 'destructive' });
     } else if (data) {
-      toast({ title: 'Exercise created!' });
+      toast({ title: t('exerciseCreated') });
       setName('');
       onCreated(data as Exercise);
+    }
+  };
+
+  // Translate muscle group
+  const tMuscle = (mg: string) => {
+    try {
+      return t(`muscleGroups.${mg}` as Parameters<typeof t>[0]);
+    } catch {
+      return mg;
+    }
+  };
+
+  // Translate exercise type
+  const tType = (et: string) => {
+    try {
+      return t(`exerciseTypes.${et}` as Parameters<typeof t>[0]);
+    } catch {
+      return et;
     }
   };
 
@@ -55,22 +81,24 @@ export function CreateExerciseDialog({ open, onClose, onCreated }: CreateExercis
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-sm mx-auto">
         <DialogHeader>
-          <DialogTitle>Create Custom Exercise</DialogTitle>
+          <DialogTitle>{t('createNew')}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          {/* Exercise Name */}
           <div className="space-y-1.5">
-            <Label htmlFor="ex-name">Exercise Name</Label>
+            <Label htmlFor="ex-name">{t('exerciseName')}</Label>
             <Input
               id="ex-name"
-              placeholder="e.g. Cable Lateral Raise"
+              placeholder={t('exerciseNamePlaceholder')}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
             />
           </div>
 
+          {/* Muscle Group */}
           <div className="space-y-1.5">
-            <Label>Muscle Group</Label>
+            <Label>{t('muscleGroup')}</Label>
             <div className="grid grid-cols-3 gap-1.5">
               {MUSCLE_GROUPS.map((mg) => (
                 <button
@@ -83,14 +111,15 @@ export function CreateExerciseDialog({ open, onClose, onCreated }: CreateExercis
                       : 'bg-background border-border hover:bg-accent'
                   }`}
                 >
-                  {mg}
+                  {tMuscle(mg)}
                 </button>
               ))}
             </div>
           </div>
 
+          {/* Exercise Type */}
           <div className="space-y-1.5">
-            <Label>Exercise Type</Label>
+            <Label>{t('exerciseType')}</Label>
             <div className="grid grid-cols-2 gap-1.5">
               {EXERCISE_TYPES.map((et) => (
                 <button
@@ -103,18 +132,28 @@ export function CreateExerciseDialog({ open, onClose, onCreated }: CreateExercis
                       : 'bg-background border-border hover:bg-accent'
                   }`}
                 >
-                  {et}
+                  {tType(et)}
                 </button>
               ))}
             </div>
           </div>
 
+          {/* Actions */}
           <div className="flex gap-2 pt-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
-              Cancel
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={onClose}
+            >
+              {tCommon('cancel')}
             </Button>
-            <Button type="submit" className="flex-1" disabled={isLoading || !name.trim()}>
-              {isLoading ? 'Creating...' : 'Create'}
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={isLoading || !name.trim()}
+            >
+              {isLoading ? t('creating') : t('create')}
             </Button>
           </div>
         </form>

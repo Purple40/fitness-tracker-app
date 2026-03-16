@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,8 +31,6 @@ import { LogMacrosDialog } from '@/components/nutrition/LogMacrosDialog';
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
   const tCommon = useTranslations('common');
-  const router = useRouter();
-  const supabase = createClient();
   const [userName, setUserName] = useState('');
   const [showLogWeight, setShowLogWeight] = useState(false);
   const [showLogMacros, setShowLogMacros] = useState(false);
@@ -41,13 +38,23 @@ export default function DashboardPage() {
   const { todayMetric, weeklyStats, fetchMetrics } = useBodyMetrics();
   const { todayLog, macroTargets, fetchLogs } = useNutrition();
   const { sessions } = useWorkouts();
-  const { todayMetric: recoveryToday } = useRecovery();
+  const recoveryHook = useRecovery();
+  const recoveryToday = recoveryHook.todayMetric;
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setUserName('demo');
+      return;
+    }
+    const supabase = createClient();
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.email) {
-        setUserName(user.email.split('@')[0]);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) {
+          setUserName(user.email.split('@')[0]);
+        }
+      } catch {
+        // silently ignore auth errors in demo mode
       }
     };
     getUser();
@@ -388,6 +395,7 @@ export default function DashboardPage() {
         onOpenChange={setShowLogMacros}
         onSuccess={() => fetchLogs()}
         macroTargets={macroTargets}
+        todayLog={todayLog}
       />
     </div>
   );

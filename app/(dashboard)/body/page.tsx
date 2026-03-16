@@ -1,14 +1,23 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Header } from '@/components/layout/Header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Scale, Footprints, TrendingDown, TrendingUp, Minus, Trash2 } from 'lucide-react';
+import {
+  Plus,
+  Scale,
+  Footprints,
+  TrendingDown,
+  TrendingUp,
+  Minus,
+  Trash2,
+} from 'lucide-react';
 import { useBodyMetrics } from '@/lib/hooks/useBodyMetrics';
-import { formatDate, formatDateShort, getTodayString } from '@/lib/utils';
+import { formatDate, getTodayString } from '@/lib/utils';
 import { LogWeightDialog } from '@/components/body/LogWeightDialog';
 import { WeightChart } from '@/components/body/WeightChart';
 import { StepsChart } from '@/components/body/StepsChart';
@@ -16,6 +25,9 @@ import { BodyMetric } from '@/types';
 import { toast } from '@/lib/hooks/useToast';
 
 export default function BodyPage() {
+  const t = useTranslations('body');
+  const tCommon = useTranslations('common');
+
   const [showLogDialog, setShowLogDialog] = useState(false);
   const [editingMetric, setEditingMetric] = useState<BodyMetric | null>(null);
 
@@ -30,23 +42,27 @@ export default function BodyPage() {
       : null;
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this entry?')) return;
+    if (!confirm(t('deleteConfirm'))) return;
     const { error } = await deleteMetric(id);
     if (error) {
-      toast({ title: 'Error', description: error, variant: 'destructive' });
+      toast({ title: tCommon('error'), description: error, variant: 'destructive' });
     } else {
-      toast({ title: 'Deleted', description: 'Entry removed.' });
+      toast({ title: '✓ ' + t('deleteSuccess') });
     }
   };
 
   return (
     <div className="page-enter">
       <Header
-        title="Body Tracking"
+        title={t('title')}
         rightElement={
-          <Button size="sm" onClick={() => setShowLogDialog(true)} className="gap-1 h-8">
+          <Button
+            size="sm"
+            onClick={() => setShowLogDialog(true)}
+            className="gap-1 h-8"
+          >
             <Plus className="h-4 w-4" />
-            Log
+            {t('logButton')}
           </Button>
         }
       />
@@ -56,25 +72,25 @@ export default function BodyPage() {
         <div className="grid grid-cols-3 gap-3">
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-xs text-muted-foreground mb-1">Today</p>
+              <p className="text-xs text-muted-foreground mb-1">{tCommon('today')}</p>
               <p className="text-xl font-bold">
                 {todayMetric?.weight_fasted ? `${todayMetric.weight_fasted}` : '—'}
               </p>
-              <p className="text-xs text-muted-foreground">kg</p>
+              <p className="text-xs text-muted-foreground">{tCommon('kg')}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-xs text-muted-foreground mb-1">Week Avg</p>
+              <p className="text-xs text-muted-foreground mb-1">{t('weekAvg')}</p>
               <p className="text-xl font-bold">
                 {thisWeekStats?.avg_weight || '—'}
               </p>
-              <p className="text-xs text-muted-foreground">kg</p>
+              <p className="text-xs text-muted-foreground">{tCommon('kg')}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-xs text-muted-foreground mb-1">Trend</p>
+              <p className="text-xs text-muted-foreground mb-1">{t('trend')}</p>
               <div className="flex items-center justify-center gap-1">
                 {weightTrend !== null ? (
                   <>
@@ -102,7 +118,7 @@ export default function BodyPage() {
                   <span className="text-xl font-bold text-muted-foreground">—</span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">kg/week</p>
+              <p className="text-xs text-muted-foreground">{t('kgPerWeek')}</p>
             </CardContent>
           </Card>
         </div>
@@ -111,19 +127,19 @@ export default function BodyPage() {
         {thisWeekStats && (
           <Card>
             <CardContent className="p-4">
-              <p className="text-sm font-semibold mb-3">This Week</p>
+              <p className="text-sm font-semibold mb-3">{t('thisWeek')}</p>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
                   <p className="text-lg font-bold">{thisWeekStats.avg_weight}</p>
-                  <p className="text-xs text-muted-foreground">Average</p>
+                  <p className="text-xs text-muted-foreground">{tCommon('average')}</p>
                 </div>
                 <div>
                   <p className="text-lg font-bold text-green-600">{thisWeekStats.min_weight}</p>
-                  <p className="text-xs text-muted-foreground">Min</p>
+                  <p className="text-xs text-muted-foreground">{tCommon('min')}</p>
                 </div>
                 <div>
                   <p className="text-lg font-bold text-red-500">{thisWeekStats.max_weight}</p>
-                  <p className="text-xs text-muted-foreground">Max</p>
+                  <p className="text-xs text-muted-foreground">{tCommon('max')}</p>
                 </div>
               </div>
             </CardContent>
@@ -134,10 +150,10 @@ export default function BodyPage() {
         <Tabs defaultValue="weight">
           <TabsList className="w-full">
             <TabsTrigger value="weight" className="flex-1">
-              <Scale className="h-4 w-4 mr-1" /> Weight
+              <Scale className="h-4 w-4 mr-1" /> {t('weightTab')}
             </TabsTrigger>
             <TabsTrigger value="steps" className="flex-1">
-              <Footprints className="h-4 w-4 mr-1" /> Steps
+              <Footprints className="h-4 w-4 mr-1" /> {t('stepsTab')}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="weight">
@@ -151,20 +167,19 @@ export default function BodyPage() {
         {/* History */}
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-            History
+            {t('history')}
           </h3>
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            <div className="text-center py-8 text-muted-foreground">
+              {tCommon('loading')}
+            </div>
           ) : metrics.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center">
                 <Scale className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">No entries yet</p>
-                <Button
-                  className="mt-3"
-                  onClick={() => setShowLogDialog(true)}
-                >
-                  Log your first entry
+                <p className="text-muted-foreground mb-3">{t('noEntries')}</p>
+                <Button onClick={() => setShowLogDialog(true)}>
+                  {t('logFirst')}
                 </Button>
               </CardContent>
             </Card>
@@ -182,7 +197,7 @@ export default function BodyPage() {
                             </p>
                             {metric.date === getTodayString() && (
                               <Badge variant="secondary" className="text-xs py-0">
-                                Today
+                                {tCommon('today')}
                               </Badge>
                             )}
                           </div>
@@ -190,7 +205,7 @@ export default function BodyPage() {
                             {metric.weight_fasted && (
                               <span className="text-sm text-muted-foreground flex items-center gap-1">
                                 <Scale className="h-3 w-3" />
-                                {metric.weight_fasted}kg
+                                {metric.weight_fasted}{tCommon('kg')}
                               </span>
                             )}
                             {metric.steps && (

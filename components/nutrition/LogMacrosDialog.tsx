@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,11 +10,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Utensils, Plus, RotateCcw } from 'lucide-react';
 import { useNutrition } from '@/lib/hooks/useNutrition';
 import { toast } from '@/lib/hooks/useToast';
-import { getTodayString, safeParseFloat, safeParseInt } from '@/lib/utils';
 import { MacroTarget, NutritionLog } from '@/types';
 
 interface LogMacrosDialogProps {
@@ -22,172 +20,236 @@ interface LogMacrosDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
   macroTargets: MacroTarget;
-  existingLog?: NutritionLog | null;
-  initialDate?: string;
+  todayLog?: NutritionLog | null;
 }
+
+// Quick meal presets for fast logging
+const MEAL_PRESETS = [
+  { label: 'Breakfast', emoji: '🌅' },
+  { label: 'Lunch', emoji: '☀️' },
+  { label: 'Dinner', emoji: '🌙' },
+  { label: 'Snack', emoji: '🍎' },
+  { label: 'Pre-workout', emoji: '💪' },
+  { label: 'Post-workout', emoji: '🥤' },
+];
 
 export function LogMacrosDialog({
   open,
   onOpenChange,
   onSuccess,
   macroTargets,
-  existingLog,
-  initialDate,
+  todayLog,
 }: LogMacrosDialogProps) {
-  const [date, setDate] = useState(initialDate || getTodayString());
+  const [mealName, setMealName] = useState('');
   const [calories, setCalories] = useState('');
   const [protein, setProtein] = useState('');
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
-  const [note, setNote] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
-  const { upsertLog } = useNutrition();
+  const { addToTodayLog, resetTodayLog } = useNutrition();
 
-  // Pre-fill with existing log data
-  useEffect(() => {
-    if (existingLog) {
-      setDate(existingLog.date);
-      setCalories(existingLog.calories_consumed?.toString() || '');
-      setProtein(existingLog.protein_consumed?.toString() || '');
-      setCarbs(existingLog.carbs_consumed?.toString() || '');
-      setFat(existingLog.fat_consumed?.toString() || '');
-      setNote(existingLog.note || '');
-    }
-  }, [existingLog, open]);
+  // Running totals already logged today
+  const currentCalories = todayLog?.calories_consumed ?? 0;
+  const currentProtein = todayLog?.protein_consumed ?? 0;
+  const currentCarbs = todayLog?.carbs_consumed ?? 0;
+  const currentFat = todayLog?.fat_consumed ?? 0;
+
+  // Preview what totals will be after adding
+  const previewCalories = currentCalories + (parseFloat(calories) || 0);
+  const previewProtein = currentProtein + (parseFloat(protein) || 0);
+  const previewCarbs = currentCarbs + (parseFloat(carbs) || 0);
+  const previewFat = currentFat + (parseFloat(fat) || 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!calories && !protein && !carbs && !fat) {
+      toast({
+        title: 'Nothing to add',
+        description: 'Enter at least one macro value.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsLoading(true);
-
-    const { error } = await upsertLog({
-      date,
-      calories_consumed: safeParseInt(calories),
-      protein_consumed: safeParseFloat(protein),
-      carbs_consumed: safeParseFloat(carbs),
-      fat_consumed: safeParseFloat(fat),
-      note: note || null,
+    const { error } = await addToTodayLog({
+      calories: parseFloat(calories) || 0,
+      protein: parseFloat(protein) || 0,
+      carbs: parseFloat(carbs) || 0,
+      fat: parseFloat(fat) || 0,
+      mealName: mealName || undefined,
     });
-
     setIsLoading(false);
 
     if (error) {
       toast({ title: 'Error', description: error, variant: 'destructive' });
     } else {
-      toast({ title: 'Saved!', description: 'Nutrition logged successfully.' });
+      toast({
+        title: `✓ ${mealName || 'Meal'} added!`,
+        description: `+${calories || 0} kcal · +${protein || 0}g protein`,
+        variant: 'success',
+      });
+      // Clear fields for next entry
+      setCalories('');
+      setProtein('');
+      setCarbs('');
+      setFat('');
+      setMealName('');
       onOpenChange(false);
       onSuccess?.();
     }
   };
 
-  const MacroInputRow = ({
-    id,
-    label,
-    value,
-    onChange,
-    target,
-    unit,
-    placeholder,
-  }: {
-    id: string;
-    label: string;
-    value: string;
-    onChange: (v: string) => void;
-    target: number;
-    unit: string;
-    placeholder: string;
-  }) => {
-    const pct = value ? Math.min(Math.round((parseFloat(value) / target) * 100), 100) : 0;
-    return (
-      <div className="space-y-1.5">
-        <div className="flex justify-between">
-          <Label htmlFor={id}>{label}</Label>
-          <span className="text-xs text-muted-foreground">
-            Target: {target}{unit}
-            {value && ` · ${pct}%`}
-          </span>
-        </div>
-        <Input
-          id={id}
-          type="number"
-          min="0"
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          inputMode="decimal"
-          className="text-lg"
-        />
-      </div>
-    );
+  const handleReset = async () => {
+    if (!confirm('Reset all of today\'s nutrition to zero?')) return;
+    setIsResetting(true);
+    const { error } = await resetTodayLog();
+    setIsResetting(false);
+    if (error) {
+      toast({ title: 'Error', description: error, variant: 'destructive' });
+    } else {
+      toast({ title: '✓ Reset', description: 'Today\'s nutrition cleared.', variant: 'success' });
+      onOpenChange(false);
+      onSuccess?.();
+    }
   };
+
+  const pct = (val: number, target: number) =>
+    target > 0 ? Math.min(Math.round((val / target) * 100), 100) : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm mx-auto max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-sm mx-auto max-h-[92vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Log Nutrition</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Utensils className="h-5 w-5 text-primary" />
+            Add Meal
+          </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+
+        {/* Today's running total */}
+        <div className="rounded-lg bg-muted/40 p-3 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Today so far
+          </p>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <TodayMacro
+              label="kcal"
+              current={currentCalories}
+              target={macroTargets.calories}
+              color="text-orange-400"
+            />
+            <TodayMacro
+              label="Protein"
+              current={currentProtein}
+              target={macroTargets.protein}
+              color="text-red-400"
+              unit="g"
+            />
+            <TodayMacro
+              label="Carbs"
+              current={currentCarbs}
+              target={macroTargets.carbs}
+              color="text-yellow-400"
+              unit="g"
+            />
+            <TodayMacro
+              label="Fat"
+              current={currentFat}
+              target={macroTargets.fat}
+              color="text-blue-400"
+              unit="g"
+            />
+          </div>
+          {/* Progress bars */}
+          <div className="space-y-1">
+            <MiniBar value={pct(currentCalories, macroTargets.calories)} color="bg-orange-500" />
+            <MiniBar value={pct(currentProtein, macroTargets.protein)} color="bg-red-500" />
+            <MiniBar value={pct(currentCarbs, macroTargets.carbs)} color="bg-yellow-500" />
+            <MiniBar value={pct(currentFat, macroTargets.fat)} color="bg-blue-500" />
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Meal name presets */}
           <div className="space-y-2">
-            <Label htmlFor="macro-date">Date</Label>
-            <Input
-              id="macro-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              max={getTodayString()}
+            <Label className="text-xs text-muted-foreground">Meal (optional)</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {MEAL_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setMealName(mealName === preset.label ? '' : preset.label)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    mealName === preset.label
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                  }`}
+                >
+                  {preset.emoji} {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Macro inputs — large touch targets */}
+          <div className="grid grid-cols-2 gap-3">
+            <MacroField
+              id="add-calories"
+              label="Calories"
+              unit="kcal"
+              value={calories}
+              onChange={setCalories}
+              preview={previewCalories}
+              target={macroTargets.calories}
+              color="text-orange-400"
+            />
+            <MacroField
+              id="add-protein"
+              label="Protein"
+              unit="g"
+              value={protein}
+              onChange={setProtein}
+              preview={previewProtein}
+              target={macroTargets.protein}
+              color="text-red-400"
+            />
+            <MacroField
+              id="add-carbs"
+              label="Carbs"
+              unit="g"
+              value={carbs}
+              onChange={setCarbs}
+              preview={previewCarbs}
+              target={macroTargets.carbs}
+              color="text-yellow-400"
+            />
+            <MacroField
+              id="add-fat"
+              label="Fat"
+              unit="g"
+              value={fat}
+              onChange={setFat}
+              preview={previewFat}
+              target={macroTargets.fat}
+              color="text-blue-400"
             />
           </div>
 
-          <MacroInputRow
-            id="calories"
-            label="Calories"
-            value={calories}
-            onChange={setCalories}
-            target={macroTargets.calories}
-            unit="kcal"
-            placeholder={`Target: ${macroTargets.calories}`}
-          />
-          <MacroInputRow
-            id="protein"
-            label="Protein"
-            value={protein}
-            onChange={setProtein}
-            target={macroTargets.protein}
-            unit="g"
-            placeholder={`Target: ${macroTargets.protein}g`}
-          />
-          <MacroInputRow
-            id="carbs"
-            label="Carbs"
-            value={carbs}
-            onChange={setCarbs}
-            target={macroTargets.carbs}
-            unit="g"
-            placeholder={`Target: ${macroTargets.carbs}g`}
-          />
-          <MacroInputRow
-            id="fat"
-            label="Fat"
-            value={fat}
-            onChange={setFat}
-            target={macroTargets.fat}
-            unit="g"
-            placeholder={`Target: ${macroTargets.fat}g`}
-          />
-
-          <div className="space-y-2">
-            <Label htmlFor="macro-note">Note (optional)</Label>
-            <Textarea
-              id="macro-note"
-              placeholder="Any notes..."
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={2}
-            />
-          </div>
-
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1 text-muted-foreground"
+              onClick={handleReset}
+              disabled={isResetting}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -196,12 +258,99 @@ export function LogMacrosDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" className="flex-1" disabled={isLoading}>
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+            <Button type="submit" className="flex-1 gap-1 h-11" disabled={isLoading}>
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  Add
+                </>
+              )}
             </Button>
           </div>
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TodayMacro({
+  label,
+  current,
+  target,
+  color,
+  unit = '',
+}: {
+  label: string;
+  current: number;
+  target: number;
+  color: string;
+  unit?: string;
+}) {
+  const pct = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
+  return (
+    <div>
+      <p className={`text-sm font-bold ${color}`}>
+        {Math.round(current)}{unit}
+      </p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">{pct}%</p>
+    </div>
+  );
+}
+
+function MiniBar({ value, color }: { value: number; color: string }) {
+  return (
+    <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+      <div
+        className={`h-full rounded-full transition-all ${color}`}
+        style={{ width: `${value}%` }}
+      />
+    </div>
+  );
+}
+
+function MacroField({
+  id,
+  label,
+  unit,
+  value,
+  onChange,
+  preview,
+  target,
+  color,
+}: {
+  id: string;
+  label: string;
+  unit: string;
+  value: string;
+  onChange: (v: string) => void;
+  preview: number;
+  target: number;
+  color: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-center">
+        <Label htmlFor={id} className="text-xs">
+          {label}
+        </Label>
+        <span className={`text-xs font-medium ${color}`}>
+          → {Math.round(preview)}/{target}{unit}
+        </span>
+      </div>
+      <Input
+        id={id}
+        type="number"
+        min="0"
+        step="1"
+        placeholder="0"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        inputMode="decimal"
+        className="text-xl h-14 font-bold text-center"
+      />
+    </div>
   );
 }
