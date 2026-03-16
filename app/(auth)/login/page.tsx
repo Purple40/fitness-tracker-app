@@ -119,21 +119,20 @@ export default function LoginPage() {
 
           <CardContent className="space-y-4">
 
-            {/* ── Continue as Demo ── */}
-            <Button
-              type="button"
-              variant={isSupabaseConfigured ? 'outline' : 'default'}
-              className={`w-full h-12 gap-2 text-base ${
-                !isSupabaseConfigured ? 'bg-primary text-primary-foreground' : ''
-              }`}
-              onClick={handleDemoContinue}
-              disabled={isDemoLoading}
-            >
-              {isDemoLoading
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <Zap className="h-4 w-4" />}
-              Continue as Demo
-            </Button>
+            {/* ── Continue as Demo — only shown when Supabase is NOT configured ── */}
+            {!isSupabaseConfigured && (
+              <Button
+                type="button"
+                className="w-full h-12 gap-2 text-base bg-primary text-primary-foreground"
+                onClick={handleDemoContinue}
+                disabled={isDemoLoading}
+              >
+                {isDemoLoading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Zap className="h-4 w-4" />}
+                Continue as Demo
+              </Button>
+            )}
 
             {/* ── Supabase auth section ── */}
             {isSupabaseConfigured && (
