@@ -360,6 +360,16 @@ export const localWorkouts = {
     return ok(prs.find((p) => p.exercise_id === exerciseId && p.record_type === recordType) || null);
   },
 
+  getAllPRs() {
+    const prs = getTable<Record<string, unknown>>('personal_records');
+    const exercises = getTable<Record<string, unknown>>('exercises');
+    const enriched = prs.map((pr) => ({
+      ...pr,
+      exercise: exercises.find((e) => e.id === pr.exercise_id) || null,
+    }));
+    return ok(enriched);
+  },
+
   upsertPR(data: Record<string, unknown>) {
     const prs = getTable<Record<string, unknown>>('personal_records');
     const idx = prs.findIndex(

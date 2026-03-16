@@ -14,9 +14,9 @@ export async function middleware(request: NextRequest) {
   // If Supabase env vars are not configured, skip auth middleware
   // This allows the app to run in demo/preview mode without a Supabase project
   if (!supabaseUrl || !supabaseAnonKey) {
-    // In demo mode: redirect root to dashboard, allow all routes
+    // In demo mode: redirect root to login so user clicks "Continue as Demo"
     if (request.nextUrl.pathname === '/') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return NextResponse.redirect(new URL('/login', request.url));
     }
     return response;
   }
