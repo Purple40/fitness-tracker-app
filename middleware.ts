@@ -7,11 +7,14 @@ export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // Support both the legacy anon key name and the new publishable key name
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   // ── Demo / preview mode ──────────────────────────────────────────────────
   // If env vars are missing the app runs without Supabase (localStorage demo).
-  if (!supabaseUrl || !supabaseKey) {
+  if (!supabaseUrl || !supabaseKey || supabaseUrl === 'https://placeholder.supabase.co') {
     if (request.nextUrl.pathname === '/') {
       return NextResponse.redirect(new URL('/login', request.url));
     }

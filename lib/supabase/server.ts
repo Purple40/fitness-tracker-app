@@ -5,7 +5,9 @@ import { cookies } from 'next/headers';
 const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 
+// Support both the legacy anon key name and the new publishable key name
 const SUPABASE_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   'placeholder-key';
 
