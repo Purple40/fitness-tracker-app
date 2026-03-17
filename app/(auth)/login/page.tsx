@@ -37,8 +37,11 @@ export default function LoginPage() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      router.push('/dashboard');
+      // Refresh server state first so middleware sees the new session cookie,
+      // then navigate. Without refresh(), the middleware's getUser() can race
+      // and redirect back to /login before the cookie is acknowledged.
       router.refresh();
+      router.push('/dashboard');
     } catch (error: unknown) {
       toast({
         title: 'Sign in failed',
