@@ -12,9 +12,9 @@ export function useBodyMetrics() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = isSupabaseConfigured ? createClient() : null;
-
   const fetchMetrics = useCallback(async (limit = 90) => {
+    // createClient() returns the singleton — always has the current session
+    const supabase = isSupabaseConfigured ? createClient() : null;
     setIsLoading(true);
     setError(null);
     try {
@@ -60,6 +60,7 @@ export function useBodyMetrics() {
     steps?: number | null;
     note?: string | null;
   }) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     setError(null);
     try {
       let result: BodyMetric;
@@ -104,6 +105,7 @@ export function useBodyMetrics() {
   }, []);
 
   const deleteMetric = useCallback(async (id: string) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         localBodyMetrics.delete(id);

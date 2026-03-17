@@ -1,39 +1,35 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-// Support both the legacy anon key name and the new publishable key name
-const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+// Support both key name formats
+const SUPABASE_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+
+const SUPABASE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
-  '';
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  'placeholder-key';
 
 export function createClient() {
   const cookieStore = cookies();
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value, ...options });
-          } catch {
-            // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing sessions.
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: '', ...options });
-          } catch {
-            // The `delete` method was called from a Server Component.
-          }
-        },
+  return createServerClient(SUPABASE_URL, SUPABASE_KEY, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
       },
-    }
-  );
+      setAll(
+        cookiesToSet: { name: string; value: string; options?: CookieOptions }[]
+      ) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          );
+        } catch {
+          // Called from a Server Component — safe to ignore.
+          // Middleware is responsible for refreshing the session.
+        }
+      },
+    },
+  });
 }

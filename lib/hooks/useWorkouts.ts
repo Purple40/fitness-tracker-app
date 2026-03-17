@@ -17,12 +17,12 @@ export function useWorkouts() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = isSupabaseConfigured ? createClient() : null;
   const { addPRNotification } = useWorkoutStore();
 
   // ─── fetch sessions ───────────────────────────────────────────────────────
 
   const fetchSessions = useCallback(async (limit = 20) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     setIsLoading(true);
     try {
       if (!supabase) {
@@ -60,6 +60,7 @@ export function useWorkouts() {
   // ─── fetch exercises ──────────────────────────────────────────────────────
 
   const fetchExercises = useCallback(async () => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         const { data } = localWorkouts.getExercises();
@@ -86,6 +87,7 @@ export function useWorkouts() {
   // ─── fetch session by id ──────────────────────────────────────────────────
 
   const fetchSessionById = useCallback(async (sessionId: string) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         const { data, error: e } = localWorkouts.getSessionById(sessionId);
@@ -127,6 +129,7 @@ export function useWorkouts() {
     note: string | null;
     duration: number | null;
   }) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         const { data, error: e } = localWorkouts.createSession(sessionData as Record<string, unknown>);
@@ -167,6 +170,7 @@ export function useWorkouts() {
     sessionId: string,
     updates: Partial<Pick<WorkoutSession, 'duration' | 'note'>>
   ) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         const { data, error: e } = localWorkouts.updateSession(sessionId, updates as Record<string, unknown>);
@@ -206,6 +210,7 @@ export function useWorkouts() {
   // ─── delete session ───────────────────────────────────────────────────────
 
   const deleteSession = useCallback(async (sessionId: string) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         localWorkouts.deleteSession(sessionId);
@@ -236,6 +241,7 @@ export function useWorkouts() {
     exerciseId: string,
     orderIndex: number
   ) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         const { data, error: e } = localWorkouts.addExerciseToSession(sessionId, exerciseId, orderIndex);
@@ -265,6 +271,7 @@ export function useWorkouts() {
   // ─── delete exercise from session ────────────────────────────────────────
 
   const deleteExerciseFromSession = useCallback(async (workoutExerciseId: string) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         localWorkouts.deleteExerciseFromSession(workoutExerciseId);
@@ -300,6 +307,7 @@ export function useWorkouts() {
       rir_done?: number | null;
     }
   ) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       let newSet: WorkoutSet;
 
@@ -345,6 +353,7 @@ export function useWorkouts() {
       rir_done?: number | null;
     }
   ) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       let newSet: WorkoutSet;
 
@@ -395,6 +404,7 @@ export function useWorkouts() {
   // ─── update set ───────────────────────────────────────────────────────────
 
   const updateSet = useCallback(async (setId: string, updates: Partial<WorkoutSet>) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         const { data, error: e } = localWorkouts.updateSet(setId, updates as Record<string, unknown>);
@@ -424,6 +434,7 @@ export function useWorkouts() {
   // ─── delete set ───────────────────────────────────────────────────────────
 
   const deleteSet = useCallback(async (setId: string) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         localWorkouts.deleteSet(setId);
@@ -448,6 +459,7 @@ export function useWorkouts() {
   // ─── finish session ───────────────────────────────────────────────────────
 
   const finishSession = useCallback(async (sessionId: string, durationMinutes: number) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         localWorkouts.updateSession(sessionId, { duration: durationMinutes });
@@ -478,6 +490,7 @@ export function useWorkouts() {
     muscle_group: string;
     exercise_type: string;
   }) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         const { data, error: e } = localWorkouts.createExercise(exercise as Record<string, unknown>);
@@ -505,6 +518,7 @@ export function useWorkouts() {
   // ─── PR detection ─────────────────────────────────────────────────────────
 
   const checkAndRecordPR = async (exerciseId: string, newSet: WorkoutSet) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     if (!newSet.weight || !newSet.reps_done) return;
 
     try {

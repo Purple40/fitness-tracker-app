@@ -2,60 +2,63 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
+  // Start with an unmodified response — the supabase client will mutate this
+  // via setAll() to write refreshed session cookies back to the browser.
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  // Support both legacy anon key and new publishable key format
-  const supabaseAnonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // If Supabase env vars are not configured, skip auth middleware
-  // This allows the app to run in demo/preview mode without a Supabase project
-  if (!supabaseUrl || !supabaseAnonKey) {
-    // In demo mode: redirect root to login so user clicks "Continue as Demo"
+  // ── Demo / preview mode ──────────────────────────────────────────────────
+  // If env vars are missing the app runs without Supabase (localStorage demo).
+  if (!supabaseUrl || !supabaseKey) {
     if (request.nextUrl.pathname === '/') {
       return NextResponse.redirect(new URL('/login', request.url));
     }
-    return response;
+    return supabaseResponse;
   }
 
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options });
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          });
-          response.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options });
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          });
-          response.cookies.set({ name, value: '', ...options });
-        },
+  // ── Supabase SSR client ──────────────────────────────────────────────────
+  // IMPORTANT: use getAll / setAll (not get/set/remove) so the session token
+  // is correctly read from chunked cookies and written back after refresh.
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
       },
-    }
-  );
+      setAll(
+        cookiesToSet: { name: string; value: string; options?: CookieOptions }[]
+      ) {
+        // Write cookies onto the request so downstream server components see them
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value)
+        );
+        // Rebuild the response so the refreshed cookies are sent to the browser
+        supabaseResponse = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options ?? {})
+        );
+      },
+    },
+  });
 
+  // IMPORTANT: always call getUser() — this refreshes the session if needed.
+  // Do NOT use getSession() here; it does not validate the JWT server-side.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protect dashboard routes
-  const protectedPaths = ['/dashboard', '/body', '/nutrition', '/workouts', '/progress', '/settings'];
+  // ── Route protection ─────────────────────────────────────────────────────
+  const protectedPaths = [
+    '/dashboard',
+    '/body',
+    '/nutrition',
+    '/workouts',
+    '/progress',
+    '/settings',
+  ];
   const isProtectedPath = protectedPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
@@ -65,11 +68,17 @@ export async function middleware(request: NextRequest) {
   }
 
   // Redirect authenticated users away from auth pages
-  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/')) {
+  if (
+    user &&
+    (request.nextUrl.pathname === '/login' ||
+      request.nextUrl.pathname === '/')
+  ) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  return response;
+  // IMPORTANT: return supabaseResponse (not NextResponse.next()) so the
+  // refreshed session cookies are included in the response.
+  return supabaseResponse;
 }
 
 export const config = {

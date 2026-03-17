@@ -18,11 +18,10 @@ export function useNutrition() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = isSupabaseConfigured ? createClient() : null;
-
   // ─── fetch macro targets ──────────────────────────────────────────────────
 
   const fetchMacroTargets = useCallback(async () => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         const { data } = localNutrition.getMacroTargets();
@@ -43,6 +42,7 @@ export function useNutrition() {
   // ─── fetch logs ───────────────────────────────────────────────────────────
 
   const fetchLogs = useCallback(async (limit = 30) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     setIsLoading(true);
     setError(null);
     try {
@@ -80,6 +80,7 @@ export function useNutrition() {
     fat_consumed?: number | null;
     note?: string | null;
   }) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     setError(null);
     try {
       let result: NutritionLog;
@@ -127,6 +128,7 @@ export function useNutrition() {
     fat: number;
     mealName?: string;
   }) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     setError(null);
     const today = getTodayString();
     try {
@@ -202,6 +204,7 @@ export function useNutrition() {
   // ─── reset today log ──────────────────────────────────────────────────────
 
   const resetTodayLog = useCallback(async () => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     const today = getTodayString();
     try {
       const resetData = {
@@ -251,6 +254,7 @@ export function useNutrition() {
   // ─── delete log ───────────────────────────────────────────────────────────
 
   const deleteLog = useCallback(async (id: string) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       if (!supabase) {
         localNutrition.delete(id);
@@ -278,6 +282,7 @@ export function useNutrition() {
     carbs: number;
     fat: number;
   }) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     try {
       let result: MacroTarget;
 

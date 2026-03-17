@@ -10,9 +10,8 @@ export function useRecovery() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = isSupabaseConfigured ? createClient() : null;
-
   const fetchMetrics = useCallback(async (limit = 30) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     setIsLoading(true);
     setError(null);
     try {
@@ -55,6 +54,7 @@ export function useRecovery() {
     sleep_hours?: number | null;
     note?: string | null;
   }) => {
+    const supabase = isSupabaseConfigured ? createClient() : null;
     setError(null);
     try {
       let result: RecoveryMetric;

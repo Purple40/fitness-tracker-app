@@ -1,36 +1,38 @@
-import { createClient as _create, SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database';
+import { createBrowserClient } from '@supabase/ssr';
 
+// Support both key name formats
 const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 
-const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+const SUPABASE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
-  'placeholder-anon-key';
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  'placeholder-key';
 
-// Singleton — one instance per browser tab so the JWT is always present
-let _client: SupabaseClient<Database> | null = null;
+// ─── Singleton ────────────────────────────────────────────────────────────────
+// Using createBrowserClient from @supabase/ssr ensures the session is read from
+// cookies (set by the middleware) rather than localStorage.  A singleton avoids
+// stale-closure bugs in useCallback hooks that capture the client at first render.
+let _browserClient: ReturnType<typeof createBrowserClient> | null = null;
 
-export function createClient(): SupabaseClient<Database> {
-  if (!_client) {
-    _client = _create<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
-    });
+export function createClient() {
+  // Server-side: always create a fresh instance (no singleton needed)
+  if (typeof window === 'undefined') {
+    return createBrowserClient(SUPABASE_URL, SUPABASE_KEY);
   }
-  return _client;
+  // Client-side: reuse the same instance so the cookie-based session is shared
+  if (!_browserClient) {
+    _browserClient = createBrowserClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+  return _browserClient;
 }
 
-// Legacy named export kept for any direct imports
+// Convenience export used in a few places
 export const supabase = createClient();
 
 export const isSupabaseConfigured =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
   !!(
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
