@@ -2,6 +2,32 @@
 // DATABASE TYPES
 // ============================================================
 
+export interface UserProfile {
+  user_id: string;
+  name: string;
+  age: number | null;
+  gender: 'male' | 'female' | 'other' | null;
+  height_cm: number | null;
+  starting_weight_kg: number | null;
+  training_experience: 'beginner' | 'intermediate' | 'advanced' | null;
+  onboarding_completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserProfileFormData {
+  name: string;
+  age: string;
+  gender: 'male' | 'female' | 'other' | '';
+  height_cm: string;
+  starting_weight_kg: string;
+  training_experience: 'beginner' | 'intermediate' | 'advanced' | '';
+  goal_calories: string;
+  goal_protein: string;
+  goal_carbs: string;
+  goal_fat: string;
+}
+
 export interface User {
   id: string;
   email: string;

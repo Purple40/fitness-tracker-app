@@ -59,6 +59,7 @@ export async function middleware(request: NextRequest) {
     '/workouts',
     '/progress',
     '/settings',
+    '/onboarding',
   ];
   const isProtectedPath = protectedPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)

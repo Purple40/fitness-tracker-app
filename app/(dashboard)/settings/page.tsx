@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
@@ -18,6 +18,7 @@ import {
   Camera,
   Heart,
   Globe,
+  Activity,
 } from 'lucide-react';
 import { useNutrition } from '@/lib/hooks/useNutrition';
 import { useUserStore } from '@/store/userStore';
@@ -27,6 +28,18 @@ import Link from 'next/link';
 import { LanguageSwitcher } from '@/components/layout/LanguageSwitcher';
 import { useLocale } from '@/components/providers/LocaleProvider';
 import { localeNames } from '@/lib/i18n';
+import {
+  useUserProfile,
+  calculateBMI,
+  getBMICategory,
+  getBMICategoryLabel,
+  getBMICategoryColor,
+} from '@/lib/hooks/useUserProfile';
+import { cn } from '@/lib/utils';
+import type { UserProfile } from '@/types/index';
+
+type Gender = 'male' | 'female' | 'other';
+type Experience = 'beginner' | 'intermediate' | 'advanced';
 
 export default function SettingsPage() {
   const t = useTranslations('settings');
@@ -36,12 +49,39 @@ export default function SettingsPage() {
   const { macroTargets, updateMacroTargets } = useNutrition();
   const { userEmail } = useUserStore();
   const { locale } = useLocale();
+  const { fetchProfile, updateProfile } = useUserProfile();
 
   const [calories, setCalories] = useState(String(macroTargets?.calories || 2460));
   const [protein, setProtein] = useState(String(macroTargets?.protein || 140));
   const [carbs, setCarbs] = useState(String(macroTargets?.carbs || 340));
   const [fat, setFat] = useState(String(macroTargets?.fat || 60));
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Profile fields
+  const [profileName, setProfileName] = useState('');
+  const [profileAge, setProfileAge] = useState('');
+  const [profileGender, setProfileGender] = useState<Gender | ''>('');
+  const [profileHeight, setProfileHeight] = useState('');
+  const [profileWeight, setProfileWeight] = useState('');
+  const [profileExperience, setProfileExperience] = useState<Experience | ''>('');
+
+  useEffect(() => {
+    fetchProfile().then((p: UserProfile | null) => {
+      if (!p) return;
+      setProfileName(p.name ?? '');
+      setProfileAge(p.age ? String(p.age) : '');
+      setProfileGender((p.gender as Gender | '') ?? '');
+      setProfileHeight(p.height_cm ? String(p.height_cm) : '');
+      setProfileWeight(p.starting_weight_kg ? String(p.starting_weight_kg) : '');
+      setProfileExperience((p.training_experience as Experience | '') ?? '');
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Live BMI
+  const bmi = calculateBMI(parseFloat(profileWeight), parseFloat(profileHeight));
+  const bmiCategory = bmi ? getBMICategory(bmi) : null;
 
   const supabase = createClient();
 
@@ -58,6 +98,28 @@ export default function SettingsPage() {
       toast({ title: tCommon('error'), description: error, variant: 'destructive' });
     } else {
       toast({ title: t('saveSuccess') });
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!profileName.trim()) {
+      toast({ title: 'Name is required', variant: 'destructive' });
+      return;
+    }
+    setIsSavingProfile(true);
+    const { error } = await updateProfile({
+      name: profileName.trim(),
+      age: parseInt(profileAge) || null,
+      gender: (profileGender as Gender) || null,
+      height_cm: parseFloat(profileHeight) || null,
+      starting_weight_kg: parseFloat(profileWeight) || null,
+      training_experience: (profileExperience as Experience) || null,
+    });
+    setIsSavingProfile(false);
+    if (error) {
+      toast({ title: tCommon('error'), description: error, variant: 'destructive' });
+    } else {
+      toast({ title: 'Profile updated ✓' });
     }
   };
 
@@ -78,6 +140,132 @@ export default function SettingsPage() {
       <Header title={t('title')} />
 
       <div className="p-4 space-y-4">
+        {/* Profile */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <User className="h-4 w-4" />
+              My Profile
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Name</Label>
+                <Input
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="Your name"
+                  className="h-10"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Age</Label>
+                <Input
+                  type="number"
+                  value={profileAge}
+                  onChange={(e) => setProfileAge(e.target.value)}
+                  placeholder="e.g. 25"
+                  inputMode="numeric"
+                  className="h-10"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Gender</Label>
+                <div className="flex gap-1">
+                  {(['male', 'female', 'other'] as Gender[]).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setProfileGender(g)}
+                      className={cn(
+                        'flex-1 h-10 rounded-md border text-xs font-medium capitalize transition-all',
+                        profileGender === g
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground'
+                      )}
+                    >
+                      {g === 'male' ? '♂' : g === 'female' ? '♀' : '⚧'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Height (cm)</Label>
+                <Input
+                  type="number"
+                  value={profileHeight}
+                  onChange={(e) => setProfileHeight(e.target.value)}
+                  placeholder="e.g. 178"
+                  inputMode="decimal"
+                  className="h-10"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Starting weight (kg)</Label>
+                <Input
+                  type="number"
+                  value={profileWeight}
+                  onChange={(e) => setProfileWeight(e.target.value)}
+                  placeholder="e.g. 80"
+                  inputMode="decimal"
+                  className="h-10"
+                />
+              </div>
+            </div>
+
+            {/* BMI display */}
+            {bmi && bmiCategory && (
+              <div className="flex items-center justify-between rounded-lg bg-secondary/50 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">BMI</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={cn('text-sm font-bold', getBMICategoryColor(bmiCategory))}>
+                    {bmi}
+                  </span>
+                  <span className={cn('text-xs', getBMICategoryColor(bmiCategory))}>
+                    {getBMICategoryLabel(bmiCategory)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Experience */}
+            <div className="space-y-1">
+              <Label className="text-xs">Training experience</Label>
+              <div className="flex gap-2">
+                {(['beginner', 'intermediate', 'advanced'] as Experience[]).map((exp) => (
+                  <button
+                    key={exp}
+                    type="button"
+                    onClick={() => setProfileExperience(exp)}
+                    className={cn(
+                      'flex-1 h-9 rounded-md border text-xs font-medium capitalize transition-all',
+                      profileExperience === exp
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground'
+                    )}
+                  >
+                    {exp === 'beginner' ? '🌱' : exp === 'intermediate' ? '💪' : '🏆'} {exp.slice(0, 3)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              size="sm"
+              className="w-full gap-1"
+              onClick={handleSaveProfile}
+              disabled={isSavingProfile}
+            >
+              <Save className="h-3.5 w-3.5" />
+              {isSavingProfile ? 'Saving...' : 'Save Profile'}
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Account */}
         <Card>
           <CardHeader className="pb-2">

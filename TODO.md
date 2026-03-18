@@ -1,27 +1,30 @@
-# FitTrack - Bug Fixes TODO
+# Onboarding Feature — Implementation Checklist
 
-## Issues to Fix
+## Files to Create
+- [x] supabase/add_user_profiles.sql — SQL migration (run in Supabase SQL Editor)
+- [x] lib/hooks/useUserProfile.ts — profile CRUD hook + BMI helpers + macro calculator
+- [x] app/(onboarding)/layout.tsx — clean layout (no bottom nav)
+- [x] app/(onboarding)/onboarding/page.tsx — 3-step onboarding form
 
-- [x] Understand all files and plan fixes
-- [ ] Fix 1: Completed workout session view (shows empty active view instead of session data)
-- [ ] Fix 2: Login page - demo mode bypass + translations
-- [ ] Fix 3: Spanish translations - ExerciseSelector hardcoded strings
-- [ ] Fix 4: Spanish translations - CreateExerciseDialog hardcoded strings
-- [ ] Fix 5: Update en.json + es.json with missing keys
-- [ ] Fix 6: Push to Vercel via git
+## Files to Modify
+- [x] types/index.ts — added UserProfile + UserProfileFormData interfaces
+- [x] middleware.ts — added /onboarding to protected paths
+- [x] app/(dashboard)/dashboard/page.tsx — profile check + useRouter + real name display
+- [x] app/(dashboard)/settings/page.tsx — Edit Profile section with BMI display + experience selector
 
-## Root Causes
+## Steps
+1. [x] Create branch blackboxai/onboarding
+2. [x] SQL migration file (supabase/add_user_profiles.sql)
+3. [x] UserProfile type (types/index.ts)
+4. [x] useUserProfile hook (lib/hooks/useUserProfile.ts)
+5. [x] Onboarding layout (app/(onboarding)/layout.tsx)
+6. [x] Onboarding page — 3 steps: Personal Info → Body Measurements → Training & Goals
+7. [x] Middleware update — /onboarding added to protectedPaths
+8. [x] Dashboard update — useRouter + profile check + real name
+9. [x] Settings update — Profile card with BMI + experience (fixed TSX `e`→`exp` parser bug)
+10. [ ] Commit + push branch → user runs SQL migration → merge to main → Vercel deploy
 
-### Fix 1 - Session View Bug
-- `startSession()` in workoutStore resets `activeExercises: []` and sets `isWorkoutActive: true`
-- Completed sessions (duration !== null) should use local state, not the workout store
-- Need: read-only view for completed sessions + Edit toggle
-
-### Fix 2 - Login
-- Login always tries Supabase even in demo mode
-- Need: `isSupabaseConfigured` check → "Continue as Demo" button
-- Need: useTranslations for i18n
-
-### Fix 3 & 4 - Translations
-- ExerciseSelector: hardcoded "Select Exercise", "Search exercises...", "All", muscle names, etc.
-- CreateExerciseDialog: hardcoded "Create Custom Exercise", "Exercise Name", etc.
+## ⚠️ User Action Required Before Testing
+Run `supabase/add_user_profiles.sql` in the Supabase SQL Editor:
+- Creates `user_profiles` table with RLS
+- Enables row-level security (policy: user_id = auth.uid())

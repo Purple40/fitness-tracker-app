@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { Header } from '@/components/layout/Header';
@@ -31,6 +32,7 @@ import { LogMacrosDialog } from '@/components/nutrition/LogMacrosDialog';
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
   const tCommon = useTranslations('common');
+  const router = useRouter();
   const [userName, setUserName] = useState('');
   const [showLogWeight, setShowLogWeight] = useState(false);
   const [showLogMacros, setShowLogMacros] = useState(false);
@@ -47,18 +49,32 @@ export default function DashboardPage() {
       return;
     }
     const supabase = createClient();
-    const getUser = async () => {
+    const initUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (user?.email) {
-          setUserName(user.email.split('@')[0]);
+        if (!user) return;
+
+        // Check if user has completed onboarding
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('name, onboarding_completed')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (!profile || !profile.onboarding_completed) {
+          // First-time user — redirect to onboarding
+          router.push('/onboarding');
+          return;
         }
+
+        // Use real name from profile
+        setUserName(profile.name);
       } catch {
-        // silently ignore auth errors in demo mode
+        // silently ignore auth errors
       }
     };
-    getUser();
-  }, []);
+    initUser();
+  }, [router]);
 
   const today = getTodayString();
   const todaySession = sessions.find((s) => s.date === today);
